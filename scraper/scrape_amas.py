@@ -135,6 +135,26 @@ def extract_qas(soup: BeautifulSoup, contributor_name: str) -> list[dict]:
     return qas
 
 
+async def expand_read_more(page) -> int:
+    """Click all 'Read More' buttons to expand truncated answers."""
+    total = 0
+    try:
+        buttons = page.locator("text=Read More")
+        count = await buttons.count()
+        for i in range(count):
+            try:
+                await buttons.nth(i).click()
+                await asyncio.sleep(0.4)
+                total += 1
+            except Exception:
+                pass
+        if total > 0:
+            await asyncio.sleep(1)
+    except Exception:
+        pass
+    return total
+
+
 async def scrape_ama(page, contributor: dict) -> dict:
     """Scrape a single AMA page and return a transcript dict."""
     url = contributor["ama_url"]
@@ -166,6 +186,9 @@ async def scrape_ama(page, contributor: dict) -> dict:
             await page.goto(url, wait_until="networkidle", timeout=45000)
             await asyncio.sleep(2)
             await scroll_to_bottom(page, pause=1.5)
+            expanded = await expand_read_more(page)
+            if expanded:
+                print(f"  Expanded {expanded} 'Read More' sections")
 
             html = await page.content()
             soup = BeautifulSoup(html, "html.parser")
