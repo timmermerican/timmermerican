@@ -54,12 +54,6 @@ SEED_AMAS = [
         "note": "Was at Cameo at time of AMA; now VP PMM at Adobe",
     },
     {
-        "name": "Katharine Gregorio",
-        "title": "Sr. Director PMM, Creative Cloud — Adobe",
-        "ama_url": f"{SHAREBIRD_BASE}/profile/katharine-gregorio/activity/ama",
-        "note": "Original AMA session URL returns HTTP 500; using profile activity page instead",
-    },
-    {
         "name": "Gagan Mand",
         "title": "Director, PMM & Strategy — Adobe",
         "ama_url": f"{SHAREBIRD_BASE}/h/product-marketing/ama/adobe-director-product-marketing-strategy-gagan-mand-on-gtm-strategy-and-product-launches-for-enterprise-software",

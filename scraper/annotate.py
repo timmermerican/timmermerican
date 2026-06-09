@@ -169,6 +169,10 @@ def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     transcript_files = sorted(TRANSCRIPTS_DIR.glob("*.json"))
+    manual_dir = DATA_DIR / "manual"
+    if manual_dir.exists():
+        transcript_files = list(transcript_files) + sorted(manual_dir.glob("*.json"))
+
     if not transcript_files:
         print("No transcript files found. Run scrape_amas.py first.")
         return

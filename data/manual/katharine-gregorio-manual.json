@@ -1,0 +1,82 @@
+{
+  "slug": "katharine-gregorio-manual",
+  "name": "Katharine Gregorio",
+  "title": "Sr. Director PMM, Creative Cloud — Adobe",
+  "ama_url": "https://sharebird.com/profile/katharine-gregorio",
+  "source": "manual — Google-indexed Sharebird Q&A snippets (profile and AMA pages return HTTP 500)",
+  "note": "Content recovered from Google's index of Sharebird Q&A pages. Answers are verbatim from indexed content.",
+  "paywalled": false,
+  "qa_count": 10,
+  "qas": [
+    {
+      "question": "What is the difference between positioning and messaging?",
+      "answer": "Positioning is an internal artifact. Messaging is externally facing and brings this positioning to life in various contexts. Positioning is an articulation of what your company or product offers a target audience that differentiates it in the market it plays in, using internal language. Messaging brings this positioning to life in a compelling way that will (hopefully) make your target take a specific action.",
+      "answerer": "Katharine Gregorio",
+      "timestamp": "",
+      "paywalled": false
+    },
+    {
+      "question": "How does one create a positioning document?",
+      "answer": "I recommend having a positioning and messaging evergreen document that is dated and includes: 1) the positioning for the company/product, 2) how to talk about the positioning in 25, 50 and 100 words as it might appear at the bottom of a press release, and 3) any relevant messaging pillars and themes that help enable other stakeholders and agencies on how to bring the messaging to different contexts (web page copy, social copy, etc.).",
+      "answerer": "Katharine Gregorio",
+      "timestamp": "",
+      "paywalled": false
+    },
+    {
+      "question": "What messaging framework do you recommend for getting executive buy-in?",
+      "answer": "I use the tried and true umbrella message with 3 pillars and proof points (sometimes 4 but only occasionally!) to drive buy-in with executives. By breaking down key value propositions into 3 pillars and then expanding on them helps tremendously—when teams get stuck, they can fall back on remembering the 3 pillars and use them to trigger recall of the core stories and messages. When I worked at Oracle, this was a core rule for all product marketing managers: all messages must follow a 3 pillar approach, layering back up to the core 3 pillar company message. The key is to make it “stupid simple.”",
+      "answerer": "Katharine Gregorio",
+      "timestamp": "",
+      "paywalled": false
+    },
+    {
+      "question": "What is your philosophy on personas?",
+      "answer": "I’m pretty anti personas because they often end up being a fancy exercise no one really uses. Instead, I prefer to have a matrix that can flex to multiple audiences as necessary of what the key messages are that I’m trying to land. I prefer a flexible messaging approach tailored to different audiences, while also considering who in the company needs to digest the messaging (e.g., executives, agencies, etc.) to inform how to package the information.",
+      "answerer": "Katharine Gregorio",
+      "timestamp": "",
+      "paywalled": false
+    },
+    {
+      "question": "How do you approach sales enablement content creation?",
+      "answer": "Before you start creating any sales enablement asset, answer two key questions: “Who is it for?” and “What is the goal of the asset you are creating?” All good messaging is grounded in your customer insight and product benefit. Any customer quotes or case studies should ladder up to the customer benefit. When enabling teams on small incremental features, incorporate them into monthly or quarterly product update meetings alongside major releases, and offer recorded demos and help center content as resources. I also recommend hosting monthly ‘marketing/enablement showcases’ where the team walks through the latest content and explains why it was created, when to use it, and shares recent sales wins from using the asset.",
+      "answerer": "Katharine Gregorio",
+      "timestamp": "",
+      "paywalled": false
+    },
+    {
+      "question": "How do you test messaging effectiveness?",
+      "answer": "I pursue a lot of different ways to collect user feedback that are both quantitative and qualitative. I constantly test messaging in customer meetings, events, and executive briefings, ensuring to leave space for feedback and reactions or explicitly asking for it. I recommend conducting feedback on a schedule that includes win/loss analysis monthly and weekly NPS tracking. I have used LLMs to help explore different tones of a message or come up with options for ways to turn a phrase that I then test with users. Once a basic messaging framework is built, I focus on wordsmithing—for example, testing whether customers prefer certain word choices like “Measure” versus “Understand.” The more grounded messaging is in customer research, the more likely teams are to get buy-in and alignment.",
+      "answerer": "Katharine Gregorio",
+      "timestamp": "",
+      "paywalled": false
+    },
+    {
+      "question": "How do you create competitive differentiation in messaging?",
+      "answer": "It’s important to map your key capabilities with the competition to understand where that white space is, because that is where your messaging focus should live. Ask yourself: what is the one thing you can say that your competitor cannot say about a product or feature? If another company’s name can easily be swapped out with your own, then your messaging is not differentiated enough. Competitive positioning and messaging have to be one and the same. When you look at your decks and positioning, you need to do the gut check of “can my competitors say this” and if yes, change your messaging. However, there’s a “turn” in the narrative toward the end where existing solutions can’t solve the problem completely, but you should never lead with the competitive view because that tends to cause friction with the customer.",
+      "answerer": "Katharine Gregorio",
+      "timestamp": "",
+      "paywalled": false
+    },
+    {
+      "question": "What is your overall philosophy as a product marketer?",
+      "answer": "A PMM should be customer obsessed and competitor aware. Nobody anywhere wakes up and says they want to buy your product, ever. They wake up and say they need to do xyz, which your product may or may not be able to do better, faster or easier than their current approach or solution. Be competitor aware, but customer obsessed. Understand your target users and deliver what they want while operating in a competitive landscape, though keeping your focal point on the target user rather than spending too much time on competition.",
+      "answerer": "Katharine Gregorio",
+      "timestamp": "",
+      "paywalled": false
+    },
+    {
+      "question": "How do you structure your GTM strategy approach and define team structure?",
+      "answer": "Before you start working on a GTM strategy or a tactic or an idea, stop and ask “What’s the goal?” If you can answer the question simply and clearly, proceed. If you can’t answer that question or if you get a different answer from all the leadership involved, insist on getting this question answered before you start work. My advice is to sit down and look at the goals for GTM. From there look at the strategy that is needed to deliver on these goals and the capabilities required to achieve the tactics that support the strategy. Through this you can define the functions needed and outline the best roles and responsibilities possible against the needs you have, the resources you have and can hire. Over communicate where there is possible friction from the gray areas and put in place a process/way to check in on the R&Rs established as things change (new products, high growth, new competition, etc.).",
+      "answerer": "Katharine Gregorio",
+      "timestamp": "",
+      "paywalled": false
+    },
+    {
+      "question": "How do you structure a positioning document with feature proof points?",
+      "answer": "The company’s positioning is at the foundation, with value positioning often being core to this. Different features serve as proof points of this value positioning for the product or company. A positioning document should address your audience need, how you stand out/differentiated, what you provide, and white space. If you have white space identified, you can fill in the “UNLIKE” portion of positioning statements. Any given campaign or piece of content should be laser-focused on a single persona, main point, and genuine proof points or reasons to believe the main point. Proof points can go beyond features and take the form of customer testimonials, case studies, data points, and more.",
+      "answerer": "Katharine Gregorio",
+      "timestamp": "",
+      "paywalled": false
+    }
+  ]
+}
