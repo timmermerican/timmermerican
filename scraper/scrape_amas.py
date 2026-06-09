@@ -25,6 +25,29 @@ from scraper.utils import (
 TRANSCRIPTS_DIR = DATA_DIR / "transcripts"
 
 
+def dump_structure(soup: BeautifulSoup, max_elements: int = 80) -> str:
+    """Condensed tag/class tree for debugging zero-Q&A pages."""
+    lines = []
+    count = [0]
+
+    def walk(el, depth: int = 0):
+        if count[0] >= max_elements:
+            return
+        if not hasattr(el, "name") or not el.name:
+            return
+        classes = ".".join(el.get("class", []))
+        cls_str = f".{classes}" if classes else ""
+        text = el.get_text(separator=" ", strip=True)[:60].replace("\n", " ")
+        lines.append(f"{'  ' * depth}<{el.name}{cls_str}> {text}")
+        count[0] += 1
+        if depth < 5:
+            for child in el.children:
+                walk(child, depth + 1)
+
+    walk(soup.body or soup)
+    return "\n".join(lines)
+
+
 def slug_from_url(url: str) -> str:
     return urlparse(url).path.rstrip("/").split("/")[-1]
 
@@ -166,6 +189,9 @@ async def scrape_ama(page, contributor: dict) -> dict:
                 with open(debug_path, "w", encoding="utf-8") as dbg:
                     dbg.write(html)
                 print(f"  0 Q&As — saved debug HTML to {debug_path}")
+                print(f"\n--- STRUCTURE DUMP: {slug} ---")
+                print(dump_structure(soup))
+                print(f"--- END STRUCTURE DUMP ---\n")
             return result
 
         except Exception as e:
