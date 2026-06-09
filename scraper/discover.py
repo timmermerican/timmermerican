@@ -63,6 +63,11 @@ SEED_AMAS = [
         "title": "Director, PMM & Strategy — Adobe",
         "ama_url": f"{SHAREBIRD_BASE}/h/product-marketing/ama/adobe-director-product-marketing-strategy-gagan-mand-on-building-a-product-marketing-team",
     },
+    {
+        "name": "Jeremy Wood",
+        "title": "Head of GTM Strategy, APAC & Japan — Adobe",
+        "ama_url": f"{SHAREBIRD_BASE}/h/product-marketing/ama/adobe-head-of-gtm-strategy-apac-japan-jeremy-wood-on-competitive-positioning-1",
+    },
 ]
 
 ADOBE_COMPANY_URL = f"{SHAREBIRD_BASE}/c/adobe/product-marketing"
@@ -74,7 +79,8 @@ async def scrape_company_page(page) -> list[dict]:
     contributors = []
     print(f"Fetching Adobe company page: {ADOBE_COMPANY_URL}")
     try:
-        await page.goto(ADOBE_COMPANY_URL, wait_until="networkidle", timeout=30000)
+        await page.goto(ADOBE_COMPANY_URL, wait_until="domcontentloaded", timeout=30000)
+        await asyncio.sleep(3)
         await scroll_to_bottom(page)
         html = await page.content()
         soup = BeautifulSoup(html, "html.parser")
@@ -128,7 +134,8 @@ async def scan_ama_list_for_adobe(page, max_pages: int = 5) -> list[dict]:
     for page_num in range(1, max_pages + 1):
         url = f"{AMA_LIST_URL}?page={page_num}" if page_num > 1 else AMA_LIST_URL
         try:
-            await page.goto(url, wait_until="networkidle", timeout=30000)
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            await asyncio.sleep(2)
             await scroll_to_bottom(page, pause=1.0)
             html = await page.content()
             soup = BeautifulSoup(html, "html.parser")
