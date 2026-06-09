@@ -42,9 +42,8 @@ def banner(title: str):
     print(f"{'='*60}")
 
 
-def run_module(module_path: str, extra_args: list = None) -> bool:
-    cmd = [sys.executable, str(module_path)] + (extra_args or [])
-    result = subprocess.run(cmd, cwd=str(ROOT))
+def run_module(module_path: str) -> bool:
+    result = subprocess.run([sys.executable, str(module_path)], cwd=str(ROOT))
     return result.returncode == 0
 
 
@@ -137,10 +136,9 @@ def validate() -> bool:
 
 # ── Phase 3 ──────────────────────────────────────────────────────────────────
 
-def phase3_annotate(no_age_filter: bool = False) -> bool:
+def phase3_annotate() -> bool:
     banner("Phase 3: Annotating and generating output")
-    extra = ["--no-age-filter"] if no_age_filter else []
-    return run_module(ROOT / "scraper" / "annotate.py", extra)
+    return run_module(ROOT / "scraper" / "annotate.py")
 
 
 # ── Phase 4 ──────────────────────────────────────────────────────────────────
@@ -180,16 +178,11 @@ def phase4_export():
 if __name__ == "__main__":
     refresh = "--refresh" in sys.argv
     annotate_only = "--annotate-only" in sys.argv
-    no_age_filter = "--no-age-filter" in sys.argv
 
     if refresh:
         print("\n  --refresh: will delete existing transcripts and re-scrape everything")
     if annotate_only:
         print("\n  --annotate-only: skipping discovery and scraping")
-    if no_age_filter:
-        print("\n  --no-age-filter: including all Q&As regardless of age")
-    else:
-        print("\n  Age filter: excluding Q&As older than 2 years (use --no-age-filter to disable)")
 
     if not annotate_only:
         ok = phase1_discover(force=refresh)
@@ -204,7 +197,7 @@ if __name__ == "__main__":
 
     validate()
 
-    ok = phase3_annotate(no_age_filter=no_age_filter)
+    ok = phase3_annotate()
     if not ok:
         print("\nPhase 3 failed. Fix the error above and re-run.")
         sys.exit(1)
