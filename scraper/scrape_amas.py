@@ -170,6 +170,12 @@ async def scrape_ama(page, contributor: dict) -> dict:
             html = await page.content()
             soup = BeautifulSoup(html, "html.parser")
 
+            page_text = soup.get_text(separator=" ").lower()
+            if "error 500" in page_text or ("something went wrong" in page_text and "unexpected error" in page_text):
+                print(f"  HTTP 500 — page unavailable: {url}")
+                result["error"] = "HTTP 500 — AMA page unavailable on Sharebird"
+                return result
+
             if is_paywalled(soup):
                 print(f"  Paywalled: {url}")
                 result["paywalled"] = True

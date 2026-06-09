@@ -56,7 +56,8 @@ SEED_AMAS = [
     {
         "name": "Katharine Gregorio",
         "title": "Sr. Director PMM, Creative Cloud — Adobe",
-        "ama_url": f"{SHAREBIRD_BASE}/h/product-marketing/ama/adobe-sr-director-product-marketing-creative-cloud-katharine-gregorio-on-building-a-product-marketing-team",
+        "ama_url": f"{SHAREBIRD_BASE}/profile/katharine-gregorio/activity/ama",
+        "note": "Original AMA session URL returns HTTP 500; using profile activity page instead",
     },
     {
         "name": "Gagan Mand",
@@ -67,11 +68,6 @@ SEED_AMAS = [
         "name": "Gagan Mand",
         "title": "Director, PMM & Strategy — Adobe",
         "ama_url": f"{SHAREBIRD_BASE}/h/product-marketing/ama/adobe-director-product-marketing-strategy-gagan-mand-on-building-a-product-marketing-team",
-    },
-    {
-        "name": "Katharine Gregorio",
-        "title": "Sr. Director PMM, Creative Cloud — Adobe",
-        "ama_url": None,  # No direct AMA URL found; will be discovered via company page
     },
 ]
 
