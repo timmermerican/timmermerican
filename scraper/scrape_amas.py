@@ -66,8 +66,7 @@ def extract_qas(soup: BeautifulSoup, contributor_name: str) -> list[dict]:
 
             question = q_el.get_text(separator=" ", strip=True) if q_el else ""
             answer = a_el.get_text(separator=" ", strip=True) if a_el else ""
-            timestamp = time_el.get("datetime") or \
-                        (time_el.get_text(strip=True) if time_el else "")
+            timestamp = (time_el.get("datetime") or time_el.get_text(strip=True)) if time_el else ""
 
             if question or answer:
                 qas.append({
@@ -138,6 +137,17 @@ async def scrape_ama(page, contributor: dict) -> dict:
 
         html = await page.content()
         soup = BeautifulSoup(html, "html.parser")
+
+        # Debug: dump page structure on first run to data/debug_html.txt
+        debug_path = DATA_DIR / "debug_html.txt"
+        if not debug_path.exists():
+            tags = soup.find_all(True)
+            tag_summary = "\n".join(
+                f"{t.name} class={t.get('class',[])} id={t.get('id','')}"
+                for t in tags[:120]
+            )
+            debug_path.write_text(f"URL: {url}\n\n{tag_summary}\n\n---SNIPPET---\n{html[:8000]}")
+            print(f"  Debug HTML saved to {debug_path}")
 
         if is_paywalled(soup):
             print(f"  Paywalled: {url}")
