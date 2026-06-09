@@ -13,6 +13,7 @@ Writes:
 
 import json
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 import sys
@@ -51,6 +52,30 @@ TOPIC_RULES = {
 TOPIC_COMPILED = {tag: re.compile(pattern, re.IGNORECASE) for tag, pattern in TOPIC_RULES.items()}
 
 
+def parse_age_years(timestamp: str) -> float | None:
+    """Return approximate age in years from a timestamp string, or None if unparseable."""
+    if not timestamp:
+        return None
+    m = re.search(r'(\d+)\s+year', timestamp, re.I)
+    if m:
+        return float(m.group(1))
+    m = re.search(r'(\d+)\s+month', timestamp, re.I)
+    if m:
+        return float(m.group(1)) / 12
+    for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d", "%b %d, %Y", "%B %d, %Y"):
+        try:
+            dt = datetime.strptime(timestamp[:len(fmt)], fmt).replace(tzinfo=timezone.utc)
+            return (datetime.now(timezone.utc) - dt).days / 365.25
+        except ValueError:
+            continue
+    return None
+
+
+def is_too_old(timestamp: str, max_years: float) -> bool:
+    age = parse_age_years(timestamp)
+    return age is not None and age > max_years
+
+
 def is_firefly_related(text: str) -> bool:
     return bool(FIREFLY_PATTERNS.search(text))
 
@@ -63,19 +88,26 @@ def get_topic_tags(text: str) -> list[str]:
     return [tag for tag, pat in TOPIC_COMPILED.items() if pat.search(text)]
 
 
-def annotate_transcript(transcript: dict) -> dict:
+def annotate_transcript(transcript: dict, max_age_years: float = 2.0) -> dict:
     t = transcript.copy()
     t["director_level"] = is_director_level(t.get("title", ""))
 
     annotated_qas = []
+    skipped_old = 0
     for qa in t.get("qas", []):
+        if max_age_years and is_too_old(qa.get("timestamp", ""), max_age_years):
+            skipped_old += 1
+            continue
         combined = f"{qa.get('question', '')} {qa.get('answer', '')}"
         qa = qa.copy()
         qa["firefly_related"] = is_firefly_related(combined)
         qa["topic_tags"] = get_topic_tags(combined)
         annotated_qas.append(qa)
 
+    if skipped_old:
+        print(f"    Filtered {skipped_old} Q&A(s) older than {max_age_years:.0f} years")
     t["qas"] = annotated_qas
+    t["qa_count"] = len(annotated_qas)
     t["firefly_qa_count"] = sum(1 for qa in annotated_qas if qa["firefly_related"])
     return t
 
@@ -166,6 +198,10 @@ def render_markdown(transcripts: list[dict]) -> str:
 
 
 def main():
+    import sys as _sys
+    no_age_filter = "--no-age-filter" in _sys.argv
+    max_age_years = None if no_age_filter else 2.0
+
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     transcript_files = sorted(TRANSCRIPTS_DIR.glob("*.json"))
@@ -177,7 +213,8 @@ def main():
         print("No transcript files found. Run scrape_amas.py first.")
         return
 
-    print(f"Annotating {len(transcript_files)} transcripts...")
+    age_note = "no age filter" if no_age_filter else "≤2 years old"
+    print(f"Annotating {len(transcript_files)} transcripts ({age_note})...")
     annotated = []
     for path in transcript_files:
         with open(path) as f:
@@ -185,7 +222,7 @@ def main():
         if t.get("qa_count", 0) == 0:
             print(f"  Skipping {path.name} (0 Q&As)")
             continue
-        annotated.append(annotate_transcript(t))
+        annotated.append(annotate_transcript(t, max_age_years=max_age_years))
 
     # Write JSON archive
     json_out = DATA_DIR / "annotated_transcripts.json"

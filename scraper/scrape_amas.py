@@ -144,14 +144,15 @@ async def expand_read_more(page) -> dict:
             count = await buttons.count()
             if count == 0:
                 break
-            for i in range(count):
+            cap = min(count, 50)  # safety cap — avoid runaway on pages with many buttons
+            for i in range(cap):
                 try:
-                    await buttons.nth(i).click()
-                    await asyncio.sleep(0.4)
+                    await buttons.nth(i).click(timeout=2000, no_wait_after=True)
+                    await asyncio.sleep(0.3)
                     stats["clicked"] += 1
                 except Exception:
                     pass
-            await asyncio.sleep(1.5)  # wait for content to render
+            await asyncio.sleep(2.5)  # wait for AJAX content to render
         stats["remaining_after"] = await page.locator("text=Read More").count()
     except Exception:
         pass
