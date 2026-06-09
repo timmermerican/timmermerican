@@ -76,7 +76,9 @@ def extract_qas(soup: BeautifulSoup, contributor_name: str) -> list[dict]:
                     "timestamp": timestamp,
                     "paywalled": False,
                 })
-        return qas
+        if qas:
+            return qas
+        # Strategy 1 found candidate elements but nothing extractable — fall through
 
     # Strategy 2: fall back to paragraph-level heuristics
     # Look for blocks where a bold/heading line is followed by paragraph text
@@ -130,44 +132,42 @@ async def scrape_ama(page, contributor: dict) -> dict:
         "qas": [],
     }
 
-    try:
-        await page.goto(url, wait_until="networkidle", timeout=30000)
-        await asyncio.sleep(2)
-        await scroll_to_bottom(page, pause=1.5)
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        try:
+            if attempt > 1:
+                wait = 10 * attempt
+                print(f"  Retry {attempt}/{max_attempts} (waiting {wait}s)...")
+                await asyncio.sleep(wait)
 
-        html = await page.content()
-        soup = BeautifulSoup(html, "html.parser")
+            await page.goto(url, wait_until="networkidle", timeout=45000)
+            await asyncio.sleep(2)
+            await scroll_to_bottom(page, pause=1.5)
 
-        # Debug: dump page structure on first run to data/debug_html.txt
-        debug_path = DATA_DIR / "debug_html.txt"
-        if not debug_path.exists():
-            tags = soup.find_all(True)
-            tag_summary = "\n".join(
-                f"{t.name} class={t.get('class',[])} id={t.get('id','')}"
-                for t in tags[:120]
-            )
-            debug_path.write_text(f"URL: {url}\n\n{tag_summary}\n\n---SNIPPET---\n{html[:8000]}")
-            print(f"  Debug HTML saved to {debug_path}")
+            html = await page.content()
+            soup = BeautifulSoup(html, "html.parser")
 
-        if is_paywalled(soup):
-            print(f"  Paywalled: {url}")
-            result["paywalled"] = True
-            # Still try to extract whatever is visible
+            if is_paywalled(soup):
+                print(f"  Paywalled: {url}")
+                result["paywalled"] = True
+                qas = extract_qas(soup, name)
+                for qa in qas:
+                    qa["paywalled"] = True
+                result["qas"] = qas
+                result["qa_count"] = len(qas)
+                return result
+
             qas = extract_qas(soup, name)
-            for qa in qas:
-                qa["paywalled"] = True
             result["qas"] = qas
             result["qa_count"] = len(qas)
+            print(f"  Extracted {len(qas)} Q&As")
             return result
 
-        qas = extract_qas(soup, name)
-        result["qas"] = qas
-        result["qa_count"] = len(qas)
-        print(f"  Extracted {len(qas)} Q&As")
-
-    except Exception as e:
-        print(f"  Failed: {e}")
-        result["error"] = str(e)
+        except Exception as e:
+            print(f"  Attempt {attempt} failed: {e}")
+            result["error"] = str(e)
+            if attempt == max_attempts:
+                print(f"  Giving up after {max_attempts} attempts.")
 
     return result
 
