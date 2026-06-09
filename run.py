@@ -84,6 +84,23 @@ def validate() -> bool:
     names_found = set()
     total_qas = 0
 
+    # ── QA log (written by scraper, per-answer quality data) ──────────────────
+    qa_log_path = DATA_DIR / "scrape_qa.json"
+    if qa_log_path.exists():
+        with open(qa_log_path) as f:
+            qa_log = json.load(f)
+        for entry in qa_log:
+            if entry.get("read_more_remaining", 0) > 0:
+                warnings.append(
+                    f"  WARN {entry['name']}: {entry['read_more_remaining']} "
+                    f"'Read More' button(s) still unexpanded after scrape"
+                )
+            for issue in entry.get("issues", []):
+                warnings.append(
+                    f"  WARN {entry['name']}: {issue['issue']} — {issue['question']}"
+                )
+
+    # ── Coverage and count checks (reads transcript files) ───────────────────
     sources = sorted(TRANSCRIPTS_DIR.glob("*.json")) if TRANSCRIPTS_DIR.exists() else []
     if MANUAL_DIR.exists():
         sources += sorted(MANUAL_DIR.glob("*.json"))
@@ -96,22 +113,13 @@ def validate() -> bool:
             continue
         if t.get("qa_count", 0) == 0:
             continue
-
         names_found.add(t.get("name", ""))
         total_qas += t.get("qa_count", 0)
 
-        for qa in t.get("qas", []):
-            answer = qa.get("answer", "").strip()
-            if answer.endswith("Read More") or "...Read More" in answer:
-                short_q = qa.get("question", "")[:55]
-                warnings.append(f"  WARN truncated answer ({t['name']}): {short_q}...")
-
-    # Coverage: expected contributors present?
     for expected in EXPECTED_CONTRIBUTORS:
         if not any(expected.lower() in n.lower() for n in names_found):
             warnings.append(f"  WARN missing contributor: {expected}")
 
-    # Sanity floor
     if total_qas < 100:
         warnings.append(f"  WARN only {total_qas} Q&As found — expected ≥100")
 

@@ -3,6 +3,7 @@ cookies.json
 data/transcripts/
 data/annotated_transcripts.json
 data/discovered_urls.json
+data/scrape_qa.json
 # output/ — keep the compiled transcripts in the repo
 __pycache__/
 *.pyc

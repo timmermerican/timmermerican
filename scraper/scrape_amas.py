@@ -135,24 +135,27 @@ def extract_qas(soup: BeautifulSoup, contributor_name: str) -> list[dict]:
     return qas
 
 
-async def expand_read_more(page) -> int:
-    """Click all 'Read More' buttons to expand truncated answers."""
-    total = 0
+async def expand_read_more(page) -> dict:
+    """Click all 'Read More' buttons (two passes) and verify expansion."""
+    stats = {"clicked": 0, "remaining_after": 0}
     try:
-        buttons = page.locator("text=Read More")
-        count = await buttons.count()
-        for i in range(count):
-            try:
-                await buttons.nth(i).click()
-                await asyncio.sleep(0.4)
-                total += 1
-            except Exception:
-                pass
-        if total > 0:
-            await asyncio.sleep(1)
+        for _ in range(2):  # second pass catches dynamically added buttons
+            buttons = page.locator("text=Read More")
+            count = await buttons.count()
+            if count == 0:
+                break
+            for i in range(count):
+                try:
+                    await buttons.nth(i).click()
+                    await asyncio.sleep(0.4)
+                    stats["clicked"] += 1
+                except Exception:
+                    pass
+            await asyncio.sleep(1.5)  # wait for content to render
+        stats["remaining_after"] = await page.locator("text=Read More").count()
     except Exception:
         pass
-    return total
+    return stats
 
 
 async def scrape_ama(page, contributor: dict) -> dict:
@@ -193,9 +196,13 @@ async def scrape_ama(page, contributor: dict) -> dict:
             await page.goto(url, wait_until="networkidle", timeout=45000)
             await asyncio.sleep(2)
             await scroll_to_bottom(page, pause=1.5)
-            expanded = await expand_read_more(page)
-            if expanded:
-                print(f"  Expanded {expanded} 'Read More' sections")
+            rm_stats = await expand_read_more(page)
+            if rm_stats["clicked"]:
+                print(f"  Expanded {rm_stats['clicked']} 'Read More' sections", end="")
+                if rm_stats["remaining_after"]:
+                    print(f" — WARNING: {rm_stats['remaining_after']} still unexpanded")
+                else:
+                    print(" — all clear")
 
             html = await page.content()
             soup = BeautifulSoup(html, "html.parser")
@@ -220,6 +227,39 @@ async def scrape_ama(page, contributor: dict) -> dict:
             result["qas"] = qas
             result["qa_count"] = len(qas)
             print(f"  Extracted {len(qas)} Q&As")
+
+            # Per-answer QA scan
+            qa_issues = []
+            for qa in qas:
+                answer = qa.get("answer", "").strip()
+                if answer.endswith("Read More") or "...Read More" in answer:
+                    qa_issues.append({"question": qa.get("question", "")[:80],
+                                      "issue": "truncated (Read More still in text)"})
+                elif len(answer) < 80 and qa.get("question"):
+                    qa_issues.append({"question": qa.get("question", "")[:80],
+                                      "issue": f"suspiciously short ({len(answer)} chars)"})
+
+            # Append to scrape QA log
+            qa_log_path = DATA_DIR / "scrape_qa.json"
+            log_entry = {
+                "slug": slug,
+                "name": name,
+                "read_more_clicked": rm_stats["clicked"],
+                "read_more_remaining": rm_stats["remaining_after"],
+                "qa_count": len(qas),
+                "issues": qa_issues,
+            }
+            existing_log = []
+            if qa_log_path.exists():
+                with open(qa_log_path) as lf:
+                    existing_log = json.load(lf)
+            existing_log = [e for e in existing_log if e.get("slug") != slug]
+            existing_log.append(log_entry)
+            with open(qa_log_path, "w") as lf:
+                json.dump(existing_log, lf, indent=2)
+
+            if qa_issues:
+                print(f"  QA issues: {len(qa_issues)} answer(s) flagged")
             if len(qas) == 0:
                 debug_path = DATA_DIR / f"debug_{slug}.html"
                 with open(debug_path, "w", encoding="utf-8") as dbg:
