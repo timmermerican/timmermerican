@@ -161,6 +161,11 @@ async def scrape_ama(page, contributor: dict) -> dict:
             result["qas"] = qas
             result["qa_count"] = len(qas)
             print(f"  Extracted {len(qas)} Q&As")
+            if len(qas) == 0:
+                debug_path = DATA_DIR / f"debug_{slug}.html"
+                with open(debug_path, "w", encoding="utf-8") as dbg:
+                    dbg.write(html)
+                print(f"  0 Q&As — saved debug HTML to {debug_path}")
             return result
 
         except Exception as e:
