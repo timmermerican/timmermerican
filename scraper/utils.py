@@ -122,13 +122,15 @@ async def get_authenticated_context(playwright, headless: bool = True):
     return browser, context
 
 
-async def scroll_to_bottom(page: Page, pause: float = 1.5):
+async def scroll_to_bottom(page: Page, pause: float = 1.5, max_scrolls: int = 20):
     """Scroll page to bottom to trigger lazy loading of all Q&As."""
     prev_height = 0
-    while True:
+    for i in range(max_scrolls):
         curr_height = await page.evaluate("document.body.scrollHeight")
         if curr_height == prev_height:
             break
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         await asyncio.sleep(pause)
         prev_height = curr_height
+        if i > 0 and i % 5 == 0:
+            print(f"    scrolled {i} times ({curr_height}px)...")

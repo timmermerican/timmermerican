@@ -193,9 +193,12 @@ async def scrape_ama(page, contributor: dict) -> dict:
                 print(f"  Retry {attempt}/{max_attempts} (waiting {wait}s)...")
                 await asyncio.sleep(wait)
 
+            print(f"  Loading page...")
             await page.goto(url, wait_until="domcontentloaded", timeout=45000)
             await asyncio.sleep(3)
+            print(f"  Scrolling to load all content...")
             await scroll_to_bottom(page, pause=1.5)
+            print(f"  Expanding Read More buttons...")
             rm_stats = await expand_read_more(page)
             if rm_stats["clicked"]:
                 print(f"  Expanded {rm_stats['clicked']} 'Read More' sections", end="")
