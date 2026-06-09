@@ -25,15 +25,7 @@ USER_AGENT = (
 
 
 async def launch_browser(playwright, headless: bool = True):
-    if headless:
-        browser = await playwright.chromium.launch(headless=True)
-    else:
-        # Use system Google Chrome in incognito for the login step
-        browser = await playwright.chromium.launch(
-            headless=False,
-            channel="chrome",
-            args=["--incognito"],
-        )
+    browser = await playwright.chromium.launch(headless=headless)
     context = await browser.new_context(
         user_agent=USER_AGENT,
         viewport={"width": 1280, "height": 900},
