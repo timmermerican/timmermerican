@@ -163,6 +163,13 @@ async def scrape_ama(page, contributor: dict) -> dict:
     title = contributor.get("title", "")
 
     print(f"Scraping: {name} — {url}")
+
+    if "/profile/" in url and "/activity/" in url:
+        print(f"  Skipping profile activity URL — covered by manual transcript")
+        return {"slug": slug, "name": name, "title": title, "ama_url": url,
+                "error": "profile activity URL — covered by manual transcript",
+                "paywalled": False, "qa_count": 0, "qas": []}
+
     result = {
         "slug": slug,
         "name": name,

@@ -182,6 +182,9 @@ def main():
     for path in transcript_files:
         with open(path) as f:
             t = json.load(f)
+        if t.get("qa_count", 0) == 0:
+            print(f"  Skipping {path.name} (0 Q&As)")
+            continue
         annotated.append(annotate_transcript(t))
 
     # Write JSON archive
