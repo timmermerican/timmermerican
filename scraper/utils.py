@@ -24,14 +24,8 @@ USER_AGENT = (
 )
 
 
-CHROMIUM_PATH = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome"
-
-
 async def launch_browser(playwright, headless: bool = True):
-    browser = await playwright.chromium.launch(
-        headless=headless,
-        executable_path=CHROMIUM_PATH,
-    )
+    browser = await playwright.chromium.launch(headless=headless)
     context = await browser.new_context(
         user_agent=USER_AGENT,
         viewport={"width": 1280, "height": 900},
