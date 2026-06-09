@@ -52,56 +52,33 @@ async def save_cookies(context: BrowserContext):
     print(f"Saved {len(cookies)} cookies to {COOKIES_FILE}")
 
 
-async def authenticate(context: BrowserContext) -> bool:
+async def authenticate_manual(context: BrowserContext) -> bool:
     """
-    Log in to Sharebird via LinkedIn OAuth.
-    Returns True on success, False on failure (e.g. CAPTCHA).
+    Open a visible browser window and let the user log in manually.
+    Saves cookies once they land back on Sharebird. One-time setup.
     """
-    email = os.getenv("LINKEDIN_EMAIL")
-    password = os.getenv("LINKEDIN_PASSWORD")
-    if not email or not password:
-        raise ValueError(
-            "Set LINKEDIN_EMAIL and LINKEDIN_PASSWORD in .env before running."
-        )
-
     page = await context.new_page()
     try:
-        print("Navigating to Sharebird login...")
-        await page.goto(f"{SHAREBIRD_BASE}/login", wait_until="networkidle")
-        await asyncio.sleep(2)
-
-        # Click the LinkedIn sign-in button
-        linkedin_btn = page.get_by_text("Continue with LinkedIn", exact=False)
-        if not await linkedin_btn.is_visible():
-            # Try alternative selectors
-            linkedin_btn = page.locator("a[href*='linkedin']").first
-        await linkedin_btn.click()
-        await page.wait_for_url("**/linkedin.com/**", timeout=15000)
-        print("On LinkedIn login page...")
-        await asyncio.sleep(1)
-
-        # Fill LinkedIn credentials
-        await page.fill("#username", email)
-        await page.fill("#password", password)
-        await page.click("button[type='submit']")
-
-        # Wait for redirect back to Sharebird
-        try:
-            await page.wait_for_url(f"{SHAREBIRD_BASE}/**", timeout=20000)
-        except Exception:
-            # Check for CAPTCHA or verification challenge
-            if "challenge" in page.url or "checkpoint" in page.url:
-                print(
-                    "LinkedIn CAPTCHA/checkpoint detected. "
-                    "Please complete it manually, then press Enter..."
-                )
-                input()
-                await page.wait_for_url(f"{SHAREBIRD_BASE}/**", timeout=60000)
-
-        print(f"Authenticated! Now at: {page.url}")
-        await save_cookies(context)
-        return True
-
+        print("\n" + "="*60)
+        print("A browser window will open. Please:")
+        print("  1. Click 'Continue with LinkedIn' (or any login option)")
+        print("  2. Complete the login in the browser")
+        print("  3. Once you see the Sharebird home page, come back here")
+        print("     and press Enter.")
+        print("="*60 + "\n")
+        await page.goto(f"{SHAREBIRD_BASE}/login", wait_until="domcontentloaded")
+        input("Press Enter once you are logged in to Sharebird in the browser window...")
+        current_url = page.url
+        print(f"Current URL: {current_url}")
+        if "sharebird.com" in current_url and "login" not in current_url:
+            await save_cookies(context)
+            print("Logged in successfully!")
+            return True
+        else:
+            print("Doesn't look like login completed — please check the browser window.")
+            input("If you ARE logged in, press Enter to save cookies anyway, or Ctrl+C to abort...")
+            await save_cookies(context)
+            return True
     except Exception as e:
         print(f"Authentication failed: {e}")
         return False
@@ -111,25 +88,36 @@ async def authenticate(context: BrowserContext) -> bool:
 
 async def get_authenticated_context(playwright, headless: bool = True):
     """Return a browser context with a valid Sharebird session."""
+    # Always use visible browser for first-time login so user can complete it
+    has_saved_cookies = COOKIES_FILE.exists()
+
+    if not has_saved_cookies:
+        # First run: visible browser for manual login
+        browser, context = await launch_browser(playwright, headless=False)
+        print("No saved session. Opening browser for manual login...")
+        success = await authenticate_manual(context)
+        if not success:
+            raise RuntimeError("Could not authenticate with Sharebird.")
+        return browser, context
+
+    # Subsequent runs: load cookies and verify session
     browser, context = await launch_browser(playwright, headless=headless)
-    has_cookies = await load_cookies(context)
+    await load_cookies(context)
+    page = await context.new_page()
+    await page.goto(f"{SHAREBIRD_BASE}/", wait_until="domcontentloaded", timeout=20000)
+    # Check if still logged in by looking for any user-specific element
+    content = await page.content()
+    await page.close()
+    if "login" in page.url or "sign" in page.url.lower():
+        print("Session expired. Re-opening browser for manual login...")
+        COOKIES_FILE.unlink(missing_ok=True)
+        success = await authenticate_manual(context)
+        if not success:
+            raise RuntimeError("Could not re-authenticate.")
+    else:
+        print("Session valid, proceeding...")
 
-    if has_cookies:
-        # Quick check: verify session is still valid
-        page = await context.new_page()
-        await page.goto(f"{SHAREBIRD_BASE}/", wait_until="networkidle")
-        is_logged_in = await page.locator("text=Sign out").is_visible() or \
-                       await page.locator("[data-testid='user-menu']").is_visible()
-        await page.close()
-
-        if is_logged_in:
-            print("Session still valid, skipping login.")
-            return browser, context
-
-    print("No valid session found, logging in...")
-    success = await authenticate(context)
-    if not success:
-        raise RuntimeError("Could not authenticate with Sharebird.")
+    return browser, context
 
     return browser, context
 
