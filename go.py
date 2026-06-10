@@ -95,8 +95,13 @@ async def click_read_more(page, company_url: str) -> bool:
     for i in range(1, n):
         try:
             await buttons.nth(i).click(timeout=3000, no_wait_after=True)
-            # Random pause — feels like someone reading before clicking next
-            await asyncio.sleep(random.uniform(1.0, 3.5))
+            # Every 10-15 clicks, take a longer break (someone stepped away)
+            if i % random.randint(10, 15) == 0:
+                pause = random.uniform(15, 30)
+                print(f"  (pause {pause:.0f}s...)")
+                await asyncio.sleep(pause)
+            else:
+                await asyncio.sleep(random.uniform(1.0, 3.5))
         except Exception:
             pass
     await asyncio.sleep(random.uniform(2.0, 4.0))
