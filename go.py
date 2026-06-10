@@ -60,13 +60,17 @@ async def get_page(playwright):
 # ── Scraping ──────────────────────────────────────────────────────────────────
 
 async def scroll_to_bottom(page, max_scrolls=40):
-    """Scroll like a human — incremental chunks with random pauses."""
+    """Scroll like a human — jump to a random mid-point first, then continue down."""
+    # Start somewhere in the middle of the page, not the top
+    initial_jump = random.randint(800, 2500)
+    await page.evaluate(f"window.scrollTo(0, {initial_jump})")
+    await asyncio.sleep(random.uniform(1.5, 3.0))
+
     prev = 0
     for _ in range(max_scrolls):
         curr = await page.evaluate("document.body.scrollHeight")
         if curr == prev:
             break
-        # Scroll a random chunk (not straight to bottom)
         scroll_by = random.randint(600, 1200)
         await page.evaluate(f"window.scrollBy(0, {scroll_by})")
         await asyncio.sleep(random.uniform(1.5, 3.5))
