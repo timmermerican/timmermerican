@@ -66,6 +66,11 @@ SEED_AMAS = [
     {
         "name": "Jeremy Wood",
         "title": "Head of GTM Strategy, APAC & Japan — Adobe",
+        "ama_url": f"{SHAREBIRD_BASE}/h/product-marketing/ama/adobe-head-of-gtm-strategy-apac-japan-jeremy-wood-on-competitive-positioning",
+    },
+    {
+        "name": "Jeremy Wood",
+        "title": "Head of GTM Strategy, APAC & Japan — Adobe",
         "ama_url": f"{SHAREBIRD_BASE}/h/product-marketing/ama/adobe-head-of-gtm-strategy-apac-japan-jeremy-wood-on-competitive-positioning-1",
     },
 ]
