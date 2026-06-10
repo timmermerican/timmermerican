@@ -200,29 +200,10 @@ async def scrape(page) -> list[dict]:
     print("Scrolling to load all Q&As...")
     await scroll_to_bottom(page)
 
-    expanded = await click_read_more(page, COMPANY_URL)
+    await click_read_more(page, COMPANY_URL)
     html = await page.content()
     cards = parse_cards(html)
     print(f"Found {len(cards)} Q&As")
-
-    if not expanded:
-        # Read More navigated — fetch each detail page
-        print("Fetching full answers from detail pages...")
-        for i, card in enumerate(cards, 1):
-            print(f"  [{i}/{len(cards)}] {card['name']}")
-            full = await get_full_answer(page, card["detail_url"])
-            if full:
-                card["answer"] = full
-            await asyncio.sleep(1)
-    else:
-        # Any still-truncated cards (edge case)
-        for card in cards:
-            if card["answer"].endswith("Read More") or len(card["answer"]) < 60:
-                full = await get_full_answer(page, card["detail_url"])
-                if full:
-                    card["answer"] = full
-                await page.goto(COMPANY_URL, wait_until="domcontentloaded", timeout=30000)
-                await asyncio.sleep(1)
 
     return cards
 
