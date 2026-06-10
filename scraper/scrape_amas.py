@@ -1,8 +1,14 @@
 """
 Phase 2: Pull full Q&A transcripts for each discovered Adobe AMA.
 
-Reads discovered_urls.json, visits each AMA page with an authenticated
-Playwright session, extracts all questions and answers, and saves per-AMA JSON
+Primary strategy: navigate to each contributor's profile page, collect all
+/h/product-marketing/q/ links, then visit each — clicking "Read More" on the
+detail page (a DOM toggle there) to get the full unexpanded answer.
+
+Fallback: if no profile_url is set, fall back to the AMA session page and
+extract Q&A links from there (scrape_detail_qas).
+
+Reads discovered_urls.json, visits each contributor, and saves per-slug JSON
 to data/transcripts/{slug}.json.
 """
 
@@ -20,6 +26,7 @@ from scraper.utils import (
     get_authenticated_context,
     scroll_to_bottom,
     DATA_DIR,
+    SHAREBIRD_BASE,
 )
 
 TRANSCRIPTS_DIR = DATA_DIR / "transcripts"
@@ -61,18 +68,11 @@ def is_paywalled(soup: BeautifulSoup) -> bool:
 
 def extract_qas(soup: BeautifulSoup, contributor_name: str) -> list[dict]:
     """
-    Extract question/answer pairs from the AMA page HTML.
-
-    Sharebird renders AMAs as a list of question cards, each with:
-    - A question (asked by a community member)
-    - An answer (from the AMA host/contributor)
-
-    We try multiple CSS patterns since Sharebird may update their markup.
+    Extract question/answer pairs from an AMA page (fallback for pages with no
+    individual Q&A links). Tries article/section cards first, then paragraph heuristics.
     """
     qas = []
 
-    # Strategy 1: look for elements with data attributes or semantic roles
-    # Sharebird typically uses article/section elements or div.qa-item patterns
     candidates = (
         soup.find_all("article") or
         soup.find_all(class_=re.compile(r"qa|question|answer|thread|item", re.I)) or
@@ -101,10 +101,7 @@ def extract_qas(soup: BeautifulSoup, contributor_name: str) -> list[dict]:
                 })
         if qas:
             return qas
-        # Strategy 1 found candidate elements but nothing extractable — fall through
 
-    # Strategy 2: fall back to paragraph-level heuristics
-    # Look for blocks where a bold/heading line is followed by paragraph text
     body = soup.find("main") or soup.find(id=re.compile(r"content|main", re.I)) or soup.body
     if not body:
         return qas
@@ -135,35 +132,140 @@ def extract_qas(soup: BeautifulSoup, contributor_name: str) -> list[dict]:
     return qas
 
 
-async def expand_read_more(page) -> dict:
-    """Click all 'Read More' buttons (two passes) and verify expansion."""
-    stats = {"clicked": 0, "remaining_after": 0}
+async def click_read_more_and_get_answer(page, body_el_selector: str = "main, article, section, body") -> str:
+    """
+    On a detail Q&A page, click all 'Read More' buttons (DOM toggles here,
+    not navigation links) and return the full page text from the answer area.
+    """
     try:
-        for _ in range(2):  # second pass catches dynamically added buttons
-            buttons = page.locator("text=Read More")
-            count = await buttons.count()
-            if count == 0:
-                break
-            cap = min(count, 50)  # safety cap — avoid runaway on pages with many buttons
-            for i in range(cap):
-                try:
-                    await buttons.nth(i).click(timeout=2000, no_wait_after=True)
-                    await asyncio.sleep(0.3)
-                    stats["clicked"] += 1
-                except Exception:
-                    pass
-            await asyncio.sleep(2.5)  # wait for AJAX content to render
-        stats["remaining_after"] = await page.locator("text=Read More").count()
+        buttons = page.locator("text=Read More")
+        count = await buttons.count()
+        for i in range(count):
+            try:
+                await buttons.nth(i).click(timeout=3000)
+                await asyncio.sleep(0.8)
+            except Exception:
+                pass
+        if count > 0:
+            await asyncio.sleep(1.5)
     except Exception:
         pass
-    return stats
+
+
+async def scrape_qa_detail_page(page, url: str, contributor_name: str) -> dict | None:
+    """
+    Visit one /h/product-marketing/q/ page, click Read More, return full Q&A dict.
+    Returns None on hard error (500, unexpected redirect, etc.).
+    """
+    try:
+        await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        await asyncio.sleep(2)
+
+        html = await page.content()
+        soup = BeautifulSoup(html, "html.parser")
+
+        page_text = soup.get_text(separator=" ").lower()
+        if "error 500" in page_text or ("something went wrong" in page_text and "unexpected error" in page_text):
+            print(f"    HTTP 500 on detail page: {url}")
+            return None
+
+        # Click Read More — on detail pages this is a DOM toggle, not navigation
+        await click_read_more_and_get_answer(page)
+
+        # Re-capture HTML after expansion
+        html = await page.content()
+        soup = BeautifulSoup(html, "html.parser")
+
+        body = soup.find("main") or soup.body
+        if not body:
+            return None
+
+        q_el = (body.find(class_=re.compile(r"question|q-text|ask|title", re.I)) or
+                body.find(["h1", "h2", "h3"]))
+        # Specific answer selectors only — avoid generic wrappers
+        a_el = (body.find(class_=re.compile(r"\banswer\b|\bresponse\b", re.I)) or
+                body.find("article") or body.find("section"))
+        if not a_el and q_el:
+            a_el = q_el.find_next_sibling()
+
+        question = q_el.get_text(separator=" ", strip=True) if q_el else ""
+        answer = a_el.get_text(separator=" ", strip=True) if a_el else ""
+
+        # Strip question prefix if a wrapper div was grabbed
+        if question and answer.startswith(question):
+            answer = answer[len(question):].strip()
+
+        if not question and not answer:
+            return None
+
+        return {
+            "question": question,
+            "answer": answer,
+            "answerer": contributor_name,
+            "timestamp": "",
+            "paywalled": False,
+        }
+    except Exception as e:
+        print(f"    Detail page error {url}: {e}")
+        return None
+
+
+async def scrape_from_profile(page, profile_url: str, contributor_name: str) -> list[dict]:
+    """
+    Navigate to the contributor's profile page, collect all /h/product-marketing/q/ links,
+    visit each one, click Read More, and return the full Q&A list.
+    """
+    print(f"  Loading profile: {profile_url}")
+    try:
+        await page.goto(profile_url, wait_until="domcontentloaded", timeout=30000)
+        await asyncio.sleep(3)
+        await scroll_to_bottom(page, pause=1.5)
+    except Exception as e:
+        print(f"  Profile page load failed: {e}")
+        return []
+
+    html = await page.content()
+    soup = BeautifulSoup(html, "html.parser")
+
+    page_text = soup.get_text(separator=" ").lower()
+    if "error 500" in page_text or ("something went wrong" in page_text and "unexpected error" in page_text):
+        print(f"  Profile page returned HTTP 500")
+        return []
+
+    # Collect all unique /h/product-marketing/q/ links
+    links = soup.find_all("a", href=re.compile(r"/h/product-marketing/q/"))
+    seen, urls = set(), []
+    for link in links:
+        href = link.get("href", "").split("?")[0]
+        if href and href not in seen:
+            seen.add(href)
+            full_url = href if href.startswith("http") else f"{SHAREBIRD_BASE}{href}"
+            urls.append(full_url)
+
+    if not urls:
+        print(f"  No Q&A links found on profile page")
+        if len(soup.get_text()) < 500:
+            print(f"\n--- PROFILE STRUCTURE DUMP ---")
+            print(dump_structure(soup))
+            print(f"--- END STRUCTURE DUMP ---\n")
+        return []
+
+    print(f"  Found {len(urls)} Q&A link(s) on profile — scraping each...")
+    qas = []
+    for i, detail_url in enumerate(urls, 1):
+        print(f"    [{i}/{len(urls)}] {detail_url}")
+        qa = await scrape_qa_detail_page(page, detail_url, contributor_name)
+        if qa:
+            qas.append(qa)
+        await asyncio.sleep(1.2)
+
+    return qas
 
 
 async def scrape_detail_qas(page, soup: BeautifulSoup, contributor_name: str, ama_url: str) -> list[dict]:
     """
-    Visit individual /h/product-marketing/q/ pages to get full, non-truncated Q&As.
-    Sharebird's "Read More" links navigate to these pages — clicking them doesn't
-    expand content in-place. Returns empty list if no detail links are found.
+    Fallback: find /h/product-marketing/q/ links in an AMA session page soup and visit each.
+    Used when no profile_url is available.
     """
     links = soup.find_all("a", href=re.compile(r"/h/product-marketing/q/"))
     seen, urls = set(), []
@@ -171,56 +273,20 @@ async def scrape_detail_qas(page, soup: BeautifulSoup, contributor_name: str, am
         href = link.get("href", "").split("?")[0]
         if href and href not in seen:
             seen.add(href)
-            urls.append(href if href.startswith("http") else f"https://sharebird.com{href}")
+            urls.append(href if href.startswith("http") else f"{SHAREBIRD_BASE}{href}")
 
     if not urls:
         return []
 
-    print(f"  Fetching {len(urls)} Q&A detail page(s) for full answers...")
+    print(f"  Fetching {len(urls)} Q&A detail page(s) from AMA page...")
     qas = []
     for detail_url in urls:
-        try:
-            await page.goto(detail_url, wait_until="domcontentloaded", timeout=30000)
-            await asyncio.sleep(2)
-            html = await page.content()
-            ds = BeautifulSoup(html, "html.parser")
+        qa = await scrape_qa_detail_page(page, detail_url, contributor_name)
+        if qa:
+            qas.append(qa)
+        await asyncio.sleep(1)
 
-            page_text = ds.get_text(separator=" ").lower()
-            if "error 500" in page_text or ("something went wrong" in page_text and "unexpected error" in page_text):
-                continue
-
-            body = ds.find("main") or ds.body
-            if not body:
-                continue
-
-            q_el = (body.find(class_=re.compile(r"question|q-text|ask|title", re.I)) or
-                    body.find(["h1", "h2", "h3"]))
-            # Use specific answer classes only — avoid generic wrappers like "content"/"body"
-            a_el = (body.find(class_=re.compile(r"\banswer\b|\bresponse\b", re.I)) or
-                    body.find("article") or body.find("section"))
-            # Last resort: the element immediately after the question in the DOM
-            if not a_el and q_el:
-                a_el = q_el.find_next_sibling()
-
-            question = q_el.get_text(separator=" ", strip=True) if q_el else ""
-            answer = a_el.get_text(separator=" ", strip=True) if a_el else ""
-            # If the answer starts with the question text, a wrapper div was grabbed — strip it
-            if question and answer.startswith(question):
-                answer = answer[len(question):].strip()
-
-            if question or answer:
-                qas.append({
-                    "question": question,
-                    "answer": answer,
-                    "answerer": contributor_name,
-                    "timestamp": "",
-                    "paywalled": False,
-                })
-            await asyncio.sleep(1)
-        except Exception as e:
-            print(f"    Q&A detail page failed: {e}")
-
-    # Navigate back to the main AMA page so the caller's state is consistent
+    # Return to the AMA page so caller state is consistent
     if qas:
         try:
             await page.goto(ama_url, wait_until="domcontentloaded", timeout=30000)
@@ -232,13 +298,14 @@ async def scrape_detail_qas(page, soup: BeautifulSoup, contributor_name: str, am
 
 
 async def scrape_ama(page, contributor: dict) -> dict:
-    """Scrape a single AMA page and return a transcript dict."""
+    """Scrape a single contributor and return a transcript dict."""
     url = contributor["ama_url"]
+    profile_url = contributor.get("profile_url", "")
     slug = slug_from_url(url)
     name = contributor.get("name", "Unknown")
     title = contributor.get("title", "")
 
-    print(f"Scraping: {name} — {url}")
+    print(f"\nScraping: {name} — {url}")
 
     if "/profile/" in url and "/activity/" in url:
         print(f"  Skipping profile activity URL — covered by manual transcript")
@@ -251,6 +318,7 @@ async def scrape_ama(page, contributor: dict) -> dict:
         "name": name,
         "title": title,
         "ama_url": url,
+        "profile_url": profile_url,
         "source": contributor.get("source", ""),
         "note": contributor.get("note", ""),
         "paywalled": False,
@@ -266,10 +334,19 @@ async def scrape_ama(page, contributor: dict) -> dict:
                 print(f"  Retry {attempt}/{max_attempts} (waiting {wait}s)...")
                 await asyncio.sleep(wait)
 
-            print(f"  Loading page...")
+            # Primary strategy: scrape from profile page (gets ALL answers, not just one AMA)
+            if profile_url:
+                qas = await scrape_from_profile(page, profile_url, name)
+                if qas:
+                    print(f"  Extracted {len(qas)} Q&As from profile page (full text)")
+                    result["qas"] = qas
+                    result["qa_count"] = len(qas)
+                    break  # success — skip AMA page fallback
+
+            # Fallback: load the AMA session page and find Q&A links there
+            print(f"  {'No profile Q&As found — ' if profile_url else ''}Loading AMA page...")
             await page.goto(url, wait_until="domcontentloaded", timeout=45000)
             await asyncio.sleep(3)
-            print(f"  Scrolling to load all content...")
             await scroll_to_bottom(page, pause=1.5)
 
             html = await page.content()
@@ -277,7 +354,7 @@ async def scrape_ama(page, contributor: dict) -> dict:
 
             page_text = soup.get_text(separator=" ").lower()
             if "error 500" in page_text or ("something went wrong" in page_text and "unexpected error" in page_text):
-                print(f"  HTTP 500 — page unavailable: {url}")
+                print(f"  HTTP 500 — AMA page unavailable: {url}")
                 result["error"] = "HTTP 500 — AMA page unavailable on Sharebird"
                 return result
 
@@ -291,64 +368,63 @@ async def scrape_ama(page, contributor: dict) -> dict:
                 result["qa_count"] = len(qas)
                 return result
 
-            # Primary: visit individual Q&A detail pages for full (non-truncated) answers
             qas = await scrape_detail_qas(page, soup, name, url)
             if qas:
-                print(f"  Extracted {len(qas)} Q&As (detail pages — full text)")
+                print(f"  Extracted {len(qas)} Q&As (AMA page detail links)")
             else:
-                # Fallback: parse main page (answers may be truncated at "Read More")
                 qas = extract_qas(soup, name)
-                print(f"  Extracted {len(qas)} Q&As (main page — may be truncated)")
+                print(f"  Extracted {len(qas)} Q&As (main page parse — may be truncated)")
             result["qas"] = qas
             result["qa_count"] = len(qas)
-
-            # Per-answer QA scan
-            qa_issues = []
-            for qa in qas:
-                answer = qa.get("answer", "").strip()
-                if answer.endswith("Read More") or "...Read More" in answer:
-                    qa_issues.append({"question": qa.get("question", "")[:80],
-                                      "issue": "truncated (Read More still in text)"})
-                elif len(answer) < 80 and qa.get("question"):
-                    qa_issues.append({"question": qa.get("question", "")[:80],
-                                      "issue": f"suspiciously short ({len(answer)} chars)"})
-
-            # Append to scrape QA log
-            qa_log_path = DATA_DIR / "scrape_qa.json"
-            log_entry = {
-                "slug": slug,
-                "name": name,
-                "read_more_clicked": 0,
-                "read_more_remaining": 0,
-                "qa_count": len(qas),
-                "issues": qa_issues,
-            }
-            existing_log = []
-            if qa_log_path.exists():
-                with open(qa_log_path) as lf:
-                    existing_log = json.load(lf)
-            existing_log = [e for e in existing_log if e.get("slug") != slug]
-            existing_log.append(log_entry)
-            with open(qa_log_path, "w") as lf:
-                json.dump(existing_log, lf, indent=2)
-
-            if qa_issues:
-                print(f"  QA issues: {len(qa_issues)} answer(s) flagged")
-            if len(qas) == 0:
-                debug_path = DATA_DIR / f"debug_{slug}.html"
-                with open(debug_path, "w", encoding="utf-8") as dbg:
-                    dbg.write(html)
-                print(f"  0 Q&As — saved debug HTML to {debug_path}")
-                print(f"\n--- STRUCTURE DUMP: {slug} ---")
-                print(dump_structure(soup))
-                print(f"--- END STRUCTURE DUMP ---\n")
-            return result
+            break
 
         except Exception as e:
             print(f"  Attempt {attempt} failed: {e}")
             result["error"] = str(e)
             if attempt == max_attempts:
                 print(f"  Giving up after {max_attempts} attempts.")
+
+    # Per-answer QA scan
+    qas = result.get("qas", [])
+    qa_issues = []
+    for qa in qas:
+        answer = qa.get("answer", "").strip()
+        if answer.endswith("Read More") or "...Read More" in answer:
+            qa_issues.append({"question": qa.get("question", "")[:80],
+                              "issue": "truncated (Read More still in text)"})
+        elif len(answer) < 80 and qa.get("question"):
+            qa_issues.append({"question": qa.get("question", "")[:80],
+                              "issue": f"suspiciously short ({len(answer)} chars)"})
+
+    qa_log_path = DATA_DIR / "scrape_qa.json"
+    log_entry = {
+        "slug": slug,
+        "name": name,
+        "qa_count": len(qas),
+        "issues": qa_issues,
+    }
+    existing_log = []
+    if qa_log_path.exists():
+        with open(qa_log_path) as lf:
+            existing_log = json.load(lf)
+    existing_log = [e for e in existing_log if e.get("slug") != slug]
+    existing_log.append(log_entry)
+    with open(qa_log_path, "w") as lf:
+        json.dump(existing_log, lf, indent=2)
+
+    if qa_issues:
+        print(f"  QA issues: {len(qa_issues)} answer(s) flagged")
+    if len(qas) == 0:
+        debug_path = DATA_DIR / f"debug_{slug}.html"
+        html_content = ""
+        try:
+            html_content = await page.content()
+        except Exception:
+            pass
+        if html_content:
+            with open(debug_path, "w", encoding="utf-8") as dbg:
+                dbg.write(html_content)
+            print(f"  0 Q&As — saved debug HTML to {debug_path}")
 
     return result
 
@@ -364,31 +440,49 @@ async def main():
     with open(discovered_path) as f:
         contributors = json.load(f)
 
-    print(f"Scraping {len(contributors)} AMAs...")
+    # Deduplicate by profile_url so we scrape each profile exactly once.
+    # Contributors sharing a profile_url (multiple AMAs) are collapsed to one scrape run.
+    seen_profiles: set[str] = set()
+    unique_contributors: list[dict] = []
+    for c in contributors:
+        key = c.get("profile_url") or c.get("ama_url")
+        if key not in seen_profiles:
+            seen_profiles.add(key)
+            unique_contributors.append(c)
+
+    print(f"Scraping {len(unique_contributors)} contributor profile(s) "
+          f"(from {len(contributors)} total entries)...")
 
     async with async_playwright() as playwright:
         browser, context = await get_authenticated_context(playwright)
         page = await context.new_page()
 
         all_transcripts = []
-        for contributor in contributors:
+        for contributor in unique_contributors:
             transcript = await scrape_ama(page, contributor)
             all_transcripts.append(transcript)
 
-            # Save per-AMA file immediately (crash-safe)
-            slug = transcript["slug"]
-            out_path = TRANSCRIPTS_DIR / f"{slug}.json"
+            # Use profile slug as filename when available, else AMA slug
+            profile_url = contributor.get("profile_url", "")
+            if profile_url:
+                file_slug = profile_url.rstrip("/").split("/")[-1]
+            else:
+                file_slug = transcript["slug"]
+
+            transcript["slug"] = file_slug
+            out_path = TRANSCRIPTS_DIR / f"{file_slug}.json"
             with open(out_path, "w") as f:
                 json.dump(transcript, f, indent=2)
 
-            await asyncio.sleep(2)  # polite delay between requests
+            await asyncio.sleep(2)
 
         await page.close()
         await browser.close()
 
     total_qas = sum(t["qa_count"] for t in all_transcripts)
     paywalled = sum(1 for t in all_transcripts if t["paywalled"])
-    print(f"\nDone. {len(all_transcripts)} AMAs scraped, {total_qas} Q&As total, {paywalled} paywalled.")
+    print(f"\nDone. {len(all_transcripts)} contributor(s) scraped, "
+          f"{total_qas} Q&As total, {paywalled} paywalled.")
 
 
 if __name__ == "__main__":

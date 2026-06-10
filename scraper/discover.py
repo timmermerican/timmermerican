@@ -29,48 +29,57 @@ SEED_AMAS = [
     {
         "name": "Mary Sheehan",
         "title": "Head of PMM, Lightroom — Adobe",
+        "profile_url": f"{SHAREBIRD_BASE}/profile/mary-sheehan",
         "ama_url": f"{SHAREBIRD_BASE}/h/product-marketing/ama/adobe-sr-manager-product-marketing-mary-sheehan-on-product-launches",
     },
     {
         "name": "Mary Sheehan",
         "title": "Head of PMM, Lightroom — Adobe",
+        "profile_url": f"{SHAREBIRD_BASE}/profile/mary-sheehan",
         "ama_url": f"{SHAREBIRD_BASE}/h/product-marketing/ama/adobe-head-of-lightroom-product-marketing-mary-shirley-sheehan-on-go-to-market-strategy",
     },
     {
         "name": "Mary Sheehan",
         "title": "Head of PMM, Lightroom — Adobe",
+        "profile_url": f"{SHAREBIRD_BASE}/profile/mary-sheehan",
         "ama_url": f"{SHAREBIRD_BASE}/h/product-marketing/ama/adobe-head-of-lightroom-product-marketing-mary-shirley-sheehan-on-product-marketing-career-path",
     },
     {
         "name": "Mike Polner",
         "title": "VP PMM & GM for Next Gen Creators — Adobe",
+        "profile_url": f"{SHAREBIRD_BASE}/profile/mike-polner",
         "ama_url": f"{SHAREBIRD_BASE}/h/product-marketing/ama/uber-global-head-of-product-marketing-uber-eats-mike-polner-on-consumer-product-marketing",
         "note": "Was at Uber at time of AMA; now VP PMM at Adobe (owns Firefly creator PMM)",
     },
     {
         "name": "Mike Polner",
         "title": "VP PMM & GM for Next Gen Creators — Adobe",
+        "profile_url": f"{SHAREBIRD_BASE}/profile/mike-polner",
         "ama_url": f"{SHAREBIRD_BASE}/h/product-marketing/ama/cameo-sr-director-of-product-marketing-mike-polner-on-product-launches",
         "note": "Was at Cameo at time of AMA; now VP PMM at Adobe",
     },
     {
         "name": "Gagan Mand",
         "title": "Director, PMM & Strategy — Adobe",
+        "profile_url": f"{SHAREBIRD_BASE}/profile/gagan-mand",
         "ama_url": f"{SHAREBIRD_BASE}/h/product-marketing/ama/adobe-director-product-marketing-strategy-gagan-mand-on-gtm-strategy-and-product-launches-for-enterprise-software",
     },
     {
         "name": "Gagan Mand",
         "title": "Director, PMM & Strategy — Adobe",
+        "profile_url": f"{SHAREBIRD_BASE}/profile/gagan-mand",
         "ama_url": f"{SHAREBIRD_BASE}/h/product-marketing/ama/adobe-director-product-marketing-strategy-gagan-mand-on-building-a-product-marketing-team",
     },
     {
         "name": "Jeremy Wood",
         "title": "Head of GTM Strategy, APAC & Japan — Adobe",
+        "profile_url": f"{SHAREBIRD_BASE}/profile/jeremy-wood",
         "ama_url": f"{SHAREBIRD_BASE}/h/product-marketing/ama/adobe-head-of-gtm-strategy-apac-japan-jeremy-wood-on-competitive-positioning",
     },
     {
         "name": "Jeremy Wood",
         "title": "Head of GTM Strategy, APAC & Japan — Adobe",
+        "profile_url": f"{SHAREBIRD_BASE}/profile/jeremy-wood",
         "ama_url": f"{SHAREBIRD_BASE}/h/product-marketing/ama/adobe-head-of-gtm-strategy-apac-japan-jeremy-wood-on-competitive-positioning-1",
     },
 ]
