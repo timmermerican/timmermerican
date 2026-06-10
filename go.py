@@ -10,6 +10,7 @@ Subsequent runs: uses your saved session automatically.
 
 import asyncio
 import json
+import random
 import re
 import subprocess
 import sys
@@ -31,7 +32,8 @@ UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
 # ── Browser / auth ────────────────────────────────────────────────────────────
 
 async def get_page(playwright):
-    browser = await playwright.chromium.launch(headless=COOKIES.exists())
+    # Always visible — headless browsers are easier to detect
+    browser = await playwright.chromium.launch(headless=False)
     ctx = await browser.new_context(user_agent=UA, viewport={"width": 1280, "height": 900})
 
     if COOKIES.exists():
@@ -57,14 +59,17 @@ async def get_page(playwright):
 
 # ── Scraping ──────────────────────────────────────────────────────────────────
 
-async def scroll_to_bottom(page, pause=2.0, max_scrolls=30):
+async def scroll_to_bottom(page, max_scrolls=40):
+    """Scroll like a human — incremental chunks with random pauses."""
     prev = 0
     for _ in range(max_scrolls):
         curr = await page.evaluate("document.body.scrollHeight")
         if curr == prev:
             break
-        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        await asyncio.sleep(pause)
+        # Scroll a random chunk (not straight to bottom)
+        scroll_by = random.randint(600, 1200)
+        await page.evaluate(f"window.scrollBy(0, {scroll_by})")
+        await asyncio.sleep(random.uniform(1.5, 3.5))
         prev = curr
 
 
@@ -80,21 +85,21 @@ async def click_read_more(page, company_url: str) -> bool:
 
     print(f"  Expanding {n} Read More button(s)...")
     await buttons.first.click(timeout=3000, no_wait_after=True)
-    await asyncio.sleep(1.5)
+    await asyncio.sleep(random.uniform(2.0, 4.0))
 
     if not page.url.startswith(company_url.rstrip("/")):
-        # Navigated away — go back, signal caller to use detail pages
         await page.goto(company_url, wait_until="domcontentloaded", timeout=30000)
-        await asyncio.sleep(2)
+        await asyncio.sleep(random.uniform(2.0, 3.5))
         return False
 
     for i in range(1, n):
         try:
             await buttons.nth(i).click(timeout=3000, no_wait_after=True)
-            await asyncio.sleep(0.3)
+            # Random pause — feels like someone reading before clicking next
+            await asyncio.sleep(random.uniform(1.0, 3.5))
         except Exception:
             pass
-    await asyncio.sleep(2.0)
+    await asyncio.sleep(random.uniform(2.0, 4.0))
     return True
 
 
