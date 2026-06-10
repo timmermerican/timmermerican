@@ -150,9 +150,14 @@ def extract_qa_cards(soup: BeautifulSoup) -> list[dict]:
                 link)
         question = q_el.get_text(separator=" ", strip=True) if q_el else ""
 
-        # Person name
-        name_el = card_el.find(class_=re.compile(r"\bname\b|author|expert|user", re.I))
-        name = name_el.get_text(strip=True) if name_el else ""
+        # Person name — prefer profile link text (most reliable across markup changes)
+        name_link = card_el.find("a", href=re.compile(r"/profile/|/u/"))
+        if name_link:
+            name = name_link.get_text(strip=True)
+        else:
+            # Fall back to a name-class span (avoid "author" — it's often the whole block)
+            name_el = card_el.find(class_=re.compile(r"(?<![a-z])name(?![a-z])", re.I))
+            name = name_el.get_text(strip=True) if name_el else ""
 
         # Job title
         title_el = card_el.find(class_=re.compile(r"title|role|position|company", re.I))
