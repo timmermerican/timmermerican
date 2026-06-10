@@ -195,11 +195,18 @@ async def scrape_detail_qas(page, soup: BeautifulSoup, contributor_name: str, am
 
             q_el = (body.find(class_=re.compile(r"question|q-text|ask|title", re.I)) or
                     body.find(["h1", "h2", "h3"]))
-            a_el = (body.find(class_=re.compile(r"answer|response|content|body", re.I)) or
+            # Use specific answer classes only — avoid generic wrappers like "content"/"body"
+            a_el = (body.find(class_=re.compile(r"\banswer\b|\bresponse\b", re.I)) or
                     body.find("article") or body.find("section"))
+            # Last resort: the element immediately after the question in the DOM
+            if not a_el and q_el:
+                a_el = q_el.find_next_sibling()
 
             question = q_el.get_text(separator=" ", strip=True) if q_el else ""
             answer = a_el.get_text(separator=" ", strip=True) if a_el else ""
+            # If the answer starts with the question text, a wrapper div was grabbed — strip it
+            if question and answer.startswith(question):
+                answer = answer[len(question):].strip()
 
             if question or answer:
                 qas.append({
