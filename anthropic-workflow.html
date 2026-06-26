@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How Anthropic Uses Claude Code Skills Internally</title>
+  <style>
+    :root {
+      --bg: #080b14;
+      --surface: #0f1629;
+      --border: rgba(255,255,255,0.08);
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --setup: #818cf8;
+      --design: #f472b6;
+      --eng: #38bdf8;
+      --review: #fbbf24;
+      --ship: #34d399;
+      --skill: #fb923c;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      padding: 40px 24px 60px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    header h1 {
+      font-size: 1.45rem;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 6px;
+    }
+
+    header p {
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+
+    .workflow {
+      max-width: 1120px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    /* Phase row */
+    .phase {
+      display: flex;
+      align-items: stretch;
+      min-height: 80px;
+    }
+
+    .phase-label {
+      width: 110px;
+      min-width: 110px;
+      padding: 14px 12px 14px 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .phase-label .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-bottom: 4px;
+    }
+
+    .phase-label .label-text {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      line-height: 1.3;
+    }
+
+    .phase.setup  .phase-label .dot        { background: var(--setup); }
+    .phase.setup  .phase-label .label-text { color: var(--setup); }
+    .phase.design .phase-label .dot        { background: var(--design); }
+    .phase.design .phase-label .label-text { color: var(--design); }
+    .phase.eng    .phase-label .dot        { background: var(--eng); }
+    .phase.eng    .phase-label .label-text { color: var(--eng); }
+    .phase.review .phase-label .dot        { background: var(--review); }
+    .phase.review .phase-label .label-text { color: var(--review); }
+    .phase.ship   .phase-label .dot        { background: var(--ship); }
+    .phase.ship   .phase-label .label-text { color: var(--ship); }
+
+    .nodes {
+      flex: 1;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 0;
+      border-left: 1px solid var(--border);
+      padding-left: 16px;
+    }
+
+    /* Node card */
+    .node {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 9px 13px;
+      font-size: 0.78rem;
+      position: relative;
+      cursor: default;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+      min-width: 130px;
+    }
+
+    .node:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+    }
+
+    .node .name {
+      font-weight: 600;
+      color: white;
+      margin-bottom: 3px;
+      font-size: 0.8rem;
+    }
+
+    .node .desc {
+      color: var(--muted);
+      font-size: 0.68rem;
+      line-height: 1.45;
+    }
+
+    .node .tag {
+      display: inline-block;
+      font-size: 0.58rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 2px 5px;
+      border-radius: 3px;
+      margin-top: 5px;
+    }
+
+    .tag-all     { background: rgba(129,140,248,0.15); color: var(--setup); }
+    .tag-eng     { background: rgba(56,189,248,0.15);  color: var(--eng); }
+    .tag-design  { background: rgba(244,114,182,0.15); color: var(--design); }
+    .tag-nontech { background: rgba(52,211,153,0.15);  color: var(--ship); }
+
+    /* Built-in skill node */
+    .node.skill {
+      border-color: rgba(251,146,60,0.5);
+      background: rgba(251,146,60,0.06);
+    }
+
+    .node.skill .name {
+      color: var(--skill);
+    }
+
+    .node.skill::before {
+      content: 'skill';
+      position: absolute;
+      top: -9px;
+      left: 10px;
+      background: var(--skill);
+      color: #000;
+      font-size: 0.55rem;
+      font-weight: 800;
+      padding: 1px 5px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* Arrow connector */
+    .arrow {
+      color: var(--muted);
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      padding: 0 2px;
+      user-select: none;
+    }
+
+    /* Phase transition row */
+    .transition {
+      display: flex;
+      align-items: center;
+      padding: 4px 0;
+    }
+
+    .transition-gap {
+      width: 110px;
+      min-width: 110px;
+    }
+
+    .transition-content {
+      flex: 1;
+      border-left: 1px solid var(--border);
+      padding-left: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-top: 6px;
+      padding-bottom: 6px;
+    }
+
+    .transition-arrow {
+      width: 1px;
+      background: var(--border);
+      height: 28px;
+      margin-left: 20px;
+      position: relative;
+    }
+
+    .transition-arrow::after {
+      content: '↓';
+      position: absolute;
+      bottom: -14px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .transition-label {
+      font-size: 0.68rem;
+      color: var(--muted);
+      padding-left: 12px;
+      font-style: italic;
+    }
+
+    /* Non-technical callout */
+    .non-tech-section {
+      max-width: 1120px;
+      margin: 28px auto 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+    }
+
+    .non-tech-title {
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: var(--ship);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 12px;
+    }
+
+    .non-tech-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+    }
+
+    .non-tech-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .non-tech-card .team {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: white;
+      margin-bottom: 4px;
+    }
+
+    .non-tech-card .detail {
+      font-size: 0.68rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    /* Continuous improvement callout */
+    .improvement-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(52,211,153,0.08);
+      border: 1px solid rgba(52,211,153,0.25);
+      border-radius: 8px;
+      padding: 7px 12px;
+      font-size: 0.7rem;
+      color: var(--ship);
+    }
+
+    .improvement-badge .icon {
+      font-size: 1rem;
+    }
+
+    /* Legend */
+    .legend {
+      max-width: 1120px;
+      margin: 24px auto 0;
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      padding: 0 2px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .legend-swatch {
+      width: 32px;
+      height: 20px;
+      border-radius: 5px;
+      border: 1px solid;
+      flex-shrink: 0;
+    }
+
+    /* Sources */
+    .sources {
+      max-width: 1120px;
+      margin: 20px auto 0;
+      text-align: center;
+      font-size: 0.68rem;
+      color: var(--muted);
+      line-height: 1.8;
+    }
+
+    .sources a {
+      color: var(--skill);
+      text-decoration: none;
+    }
+
+    .sources a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>How Anthropic Uses Claude Code Skills Internally</h1>
+  <p>Node workflow inferred from published sources &nbsp;·&nbsp; Orange nodes = built-in /skills &nbsp;·&nbsp; Gray nodes = process steps</p>
+</header>
+
+<div class="workflow">
+
+  <!-- ── SETUP ─────────────────────────────────────────────────── -->
+  <div class="phase setup">
+    <div class="phase-label">
+      <div class="dot"></div>
+      <div class="label-text">Project Setup</div>
+    </div>
+    <div class="nodes">
+      <div class="node skill">
+        <div class="name">init</div>
+        <div class="desc">Bootstrap CLAUDE.md with<br>project context & standards</div>
+        <div class="tag tag-all">All teams</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node skill">
+        <div class="name">session-start-hook</div>
+        <div class="desc">Auto-run linters & tests<br>on every session start</div>
+        <div class="tag tag-eng">Eng</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node skill">
+        <div class="name">update-config</div>
+        <div class="desc">Set permissions, env vars,<br>hooks in settings.json</div>
+        <div class="tag tag-eng">Eng</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node">
+        <div class="name">CLAUDE.md Active</div>
+        <div class="desc">Project context loaded;<br>"IMPORTANT" markers set</div>
+        <div class="tag tag-all">All teams</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- transition -->
+  <div class="transition">
+    <div class="transition-gap"></div>
+    <div class="transition-content">
+      <div class="transition-arrow"></div>
+      <div class="transition-label">session ready</div>
+    </div>
+  </div>
+
+  <!-- ── DESIGN ─────────────────────────────────────────────────── -->
+  <div class="phase design">
+    <div class="phase-label">
+      <div class="dot"></div>
+      <div class="label-text">Design</div>
+    </div>
+    <div class="nodes">
+      <div class="node">
+        <div class="name">Figma Mockup</div>
+        <div class="desc">UI spec created<br>by designer</div>
+        <div class="tag tag-design">Design</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node">
+        <div class="name">Screenshot → Claude</div>
+        <div class="desc">Paste image directly into<br>Claude Code (vision input)</div>
+        <div class="tag tag-design">Design</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node">
+        <div class="name">Prototype Generated</div>
+        <div class="desc">Functional code from<br>visual in seconds</div>
+        <div class="tag tag-design">Design</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node skill">
+        <div class="name">run</div>
+        <div class="desc">Launch prototype,<br>observe visually</div>
+        <div class="tag tag-design">Design</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node skill">
+        <div class="name">verify</div>
+        <div class="desc">Confirm behavior<br>matches Figma spec</div>
+        <div class="tag tag-design">Design</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- transition -->
+  <div class="transition">
+    <div class="transition-gap"></div>
+    <div class="transition-content">
+      <div class="transition-arrow"></div>
+      <div class="transition-label">prototype handed to engineering — 2–3× faster than traditional handoff</div>
+    </div>
+  </div>
+
+  <!-- ── ENGINEERING ────────────────────────────────────────────── -->
+  <div class="phase eng">
+    <div class="phase-label">
+      <div class="dot"></div>
+      <div class="label-text">Engineering</div>
+    </div>
+    <div class="nodes">
+      <div class="node">
+        <div class="name">Claude "First Stop"</div>
+        <div class="desc">Every coding task starts here:<br>bugs, features, analysis</div>
+        <div class="tag tag-eng">Eng</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node">
+        <div class="name">File Identification</div>
+        <div class="desc">Claude maps which files<br>to examine or change</div>
+        <div class="tag tag-eng">Eng</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node">
+        <div class="name">Implement</div>
+        <div class="desc">Feature or bug fix written<br>(~80% of code is AI-authored)</div>
+        <div class="tag tag-eng">Eng</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node skill">
+        <div class="name">claude-api</div>
+        <div class="desc">Ref: model IDs, pricing,<br>tool use, streaming</div>
+        <div class="tag tag-eng">Eng</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node skill">
+        <div class="name">run</div>
+        <div class="desc">Launch app, observe<br>real behavior</div>
+        <div class="tag tag-eng">Eng</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node skill">
+        <div class="name">verify</div>
+        <div class="desc">Confirm change works<br>in the running app</div>
+        <div class="tag tag-eng">Eng</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node skill">
+        <div class="name">simplify</div>
+        <div class="desc">Reuse / efficiency<br>cleanup post-impl</div>
+        <div class="tag tag-eng">Eng</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- transition -->
+  <div class="transition">
+    <div class="transition-gap"></div>
+    <div class="transition-content">
+      <div class="transition-arrow"></div>
+      <div class="transition-label">PR opened</div>
+    </div>
+  </div>
+
+  <!-- ── REVIEW ─────────────────────────────────────────────────── -->
+  <div class="phase review">
+    <div class="phase-label">
+      <div class="dot"></div>
+      <div class="label-text">Review & QA</div>
+    </div>
+    <div class="nodes">
+      <div class="node skill">
+        <div class="name">code-review</div>
+        <div class="desc">Scan diff for bugs,<br>simplifications, efficiency</div>
+        <div class="tag tag-eng">Eng</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node skill">
+        <div class="name">security-review</div>
+        <div class="desc">Audit branch changes<br>before merge</div>
+        <div class="tag tag-eng">Eng</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node skill">
+        <div class="name">review</div>
+        <div class="desc">Full GitHub PR review<br>with inline comments</div>
+        <div class="tag tag-eng">Eng</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node skill">
+        <div class="name">fewer-permission-prompts</div>
+        <div class="desc">Scan transcripts → add<br>allowlist to settings</div>
+        <div class="tag tag-eng">Eng</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- transition -->
+  <div class="transition">
+    <div class="transition-gap"></div>
+    <div class="transition-content">
+      <div class="transition-arrow"></div>
+      <div class="transition-label">approved → merge</div>
+    </div>
+  </div>
+
+  <!-- ── SHIP & LEARN ────────────────────────────────────────────── -->
+  <div class="phase ship">
+    <div class="phase-label">
+      <div class="dot"></div>
+      <div class="label-text">Ship & Learn</div>
+    </div>
+    <div class="nodes">
+      <div class="node">
+        <div class="name">Ship Internally</div>
+        <div class="desc">Prototype to whole company<br>(not a small test group)</div>
+        <div class="tag tag-all">All</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node skill">
+        <div class="name">loop</div>
+        <div class="desc">Monitor CI runs, watch PR,<br>autofix on recurring interval</div>
+        <div class="tag tag-eng">Eng</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node">
+        <div class="name">Real Usage Feedback</div>
+        <div class="desc">Learn from org-wide usage;<br>skip lengthy requirements docs</div>
+        <div class="tag tag-all">All</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node">
+        <div class="name">Update CLAUDE.md ↺</div>
+        <div class="desc">End-of-session: Claude writes<br>summary + improvement notes</div>
+        <div class="tag tag-all">All</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="improvement-badge">
+        <span class="icon">↺</span>
+        <span>Feeds back into Setup phase —<br>continuous improvement loop</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Non-technical teams -->
+<div class="non-tech-section">
+  <div class="non-tech-title">Non-Technical Teams — Also Building with Claude Code</div>
+  <div class="non-tech-grid">
+    <div class="non-tech-card">
+      <div class="team">Growth Marketing</div>
+      <div class="detail">Automated workflows generate hundreds of ad variations in minutes via Claude Code</div>
+    </div>
+    <div class="non-tech-card">
+      <div class="team">Legal</div>
+      <div class="detail">Built phone tree systems and internal accessibility tools — no eng required</div>
+    </div>
+    <div class="non-tech-card">
+      <div class="team">Data Science</div>
+      <div class="detail">Complex data visualizations built without knowing JavaScript</div>
+    </div>
+    <div class="non-tech-card">
+      <div class="team">API Knowledge</div>
+      <div class="detail">Debug unfamiliar codebases without needing senior eng context</div>
+    </div>
+  </div>
+</div>
+
+<!-- Legend -->
+<div class="legend">
+  <div class="legend-item">
+    <div class="legend-swatch" style="background:rgba(251,146,60,0.06);border-color:rgba(251,146,60,0.5);"></div>
+    <span>Built-in Claude Code skill (invoked as /name)</span>
+  </div>
+  <div class="legend-item">
+    <div class="legend-swatch" style="background:#0f1629;border-color:rgba(255,255,255,0.08);"></div>
+    <span>Process step or external tool</span>
+  </div>
+  <div class="legend-item">
+    <div class="legend-swatch" style="background:rgba(52,211,153,0.08);border-color:rgba(52,211,153,0.25);"></div>
+    <span>↺ Continuous improvement loop</span>
+  </div>
+</div>
+
+<!-- Sources -->
+<div class="sources">
+  Sources:&nbsp;
+  <a href="https://claude.com/blog/how-anthropic-teams-use-claude-code">How Anthropic Teams Use Claude Code (Anthropic blog)</a>&nbsp;·&nbsp;
+  <a href="https://venturebeat.com/technology/anthropic-says-80-of-its-new-production-code-is-now-authored-by-claude-how-your-enterprise-can-keep-up">VentureBeat: 80% of code by Claude</a>&nbsp;·&nbsp;
+  <a href="https://www.anthropic.com/news/claude-design-anthropic-labs">Claude Design launch (Anthropic)</a>&nbsp;·&nbsp;
+  <a href="https://www.reworked.co/digital-workplace/anthropic-announces-dynamic-workflows-in-claude-code/">Dynamic Workflows in Claude Code</a>
+</div>
+
+</body>
+</html>
