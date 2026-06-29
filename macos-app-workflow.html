@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Apple Product Builder — Vibe-Coder Workflow</title>
+  <style>
+    :root {
+      --bg: #080b14;
+      --surface: #0f1629;
+      --border: rgba(255,255,255,0.08);
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --auto: #22d3ee;
+      --app: #818cf8;
+      --skill: #fb923c;
+      --ship: #34d399;
+      --decide: #fbbf24;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      padding: 40px 24px 60px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    header h1 {
+      font-size: 1.45rem;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 6px;
+    }
+
+    header p {
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+
+    .workflow {
+      max-width: 1120px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    /* ── Scope decision ── */
+    .decision-row {
+      display: flex;
+      justify-content: center;
+      padding: 0 0 8px;
+    }
+
+    .node-decision {
+      background: rgba(251,191,36,0.07);
+      border: 1px solid rgba(251,191,36,0.35);
+      border-radius: 10px;
+      padding: 13px 28px;
+      text-align: center;
+      min-width: 240px;
+    }
+
+    .node-decision .name {
+      font-weight: 700;
+      color: var(--decide);
+      font-size: 0.9rem;
+      margin-bottom: 5px;
+    }
+
+    .node-decision .desc {
+      color: var(--muted);
+      font-size: 0.7rem;
+    }
+
+    /* ── Fork connector ── */
+    .scope-connector {
+      position: relative;
+      height: 44px;
+    }
+
+    .scope-connector::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 1px;
+      height: 22px;
+      background: var(--border);
+    }
+
+    .scope-connector::after {
+      content: '';
+      position: absolute;
+      top: 22px;
+      left: 25%;
+      right: 25%;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .scope-connector-legs {
+      position: absolute;
+      top: 22px;
+      left: 25%;
+      right: 25%;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .scope-connector-legs::before,
+    .scope-connector-legs::after {
+      content: '';
+      width: 1px;
+      height: 22px;
+      background: var(--border);
+    }
+
+    .scope-labels {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: space-around;
+      padding: 0 80px;
+    }
+
+    .scope-label {
+      font-size: 0.6rem;
+      color: rgba(100,116,139,0.6);
+      font-style: italic;
+    }
+
+    /* ── Two-track fork ── */
+    .fork {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 4px;
+    }
+
+    .track-header {
+      padding: 9px 16px;
+      font-size: 0.62rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .track.automation .track-header {
+      background: rgba(34,211,238,0.05);
+      border-bottom: 1px solid rgba(34,211,238,0.12);
+      color: var(--auto);
+    }
+
+    .track.app-builder .track-header {
+      background: rgba(129,140,248,0.05);
+      border-bottom: 1px solid rgba(129,140,248,0.12);
+      border-left: 1px solid var(--border);
+      color: var(--app);
+    }
+
+    .track.app-builder {
+      border-left: 1px solid var(--border);
+    }
+
+    /* Phase row inside track */
+    .track-phase {
+      display: flex;
+      align-items: stretch;
+      min-height: 76px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .track-phase:last-child {
+      border-bottom: none;
+    }
+
+    .track-phase-label {
+      width: 80px;
+      min-width: 80px;
+      padding: 12px 8px 12px 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 3px;
+    }
+
+    .track-phase-label .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-bottom: 3px;
+    }
+
+    .track-phase-label .label-text {
+      font-size: 0.58rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      line-height: 1.35;
+    }
+
+    .track.automation .track-phase-label .dot        { background: var(--auto); }
+    .track.automation .track-phase-label .label-text { color: var(--auto); }
+    .track.app-builder .track-phase-label .dot        { background: var(--app); }
+    .track.app-builder .track-phase-label .label-text { color: var(--app); }
+
+    .track-nodes {
+      flex: 1;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 7px;
+      padding: 12px 14px;
+      border-left: 1px solid var(--border);
+    }
+
+    /* ── Node card ── */
+    .node {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 12px;
+      position: relative;
+      cursor: default;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    .node:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+    }
+
+    .node .name {
+      font-weight: 600;
+      color: white;
+      margin-bottom: 2px;
+      font-size: 0.78rem;
+    }
+
+    .node .desc {
+      color: var(--muted);
+      font-size: 0.64rem;
+      line-height: 1.45;
+    }
+
+    .phase-note {
+      font-size: 0.56rem;
+      color: rgba(100,116,139,0.6);
+      margin-top: 3px;
+      font-style: italic;
+    }
+
+    /* Skill node */
+    .node.skill {
+      border-color: rgba(251,146,60,0.45);
+      background: rgba(251,146,60,0.05);
+    }
+
+    .node.skill .name { color: var(--skill); }
+
+    .node.skill::before {
+      content: 'skill';
+      position: absolute;
+      top: -8px;
+      left: 10px;
+      background: var(--skill);
+      color: #000;
+      font-size: 0.5rem;
+      font-weight: 800;
+      padding: 1px 5px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* Arrow */
+    .arrow {
+      color: var(--muted);
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      user-select: none;
+      padding: 0 1px;
+    }
+
+    /* ── Converge ── */
+    .converge-label {
+      text-align: center;
+      padding: 10px 0 4px;
+      font-size: 0.63rem;
+      color: rgba(100,116,139,0.6);
+      font-style: italic;
+    }
+
+    /* ── Full-width phase rows (verify/ship) ── */
+    .phase {
+      display: flex;
+      align-items: stretch;
+      min-height: 72px;
+    }
+
+    .phase-label {
+      width: 110px;
+      min-width: 110px;
+      padding: 14px 12px 14px 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .phase-label .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-bottom: 4px;
+    }
+
+    .phase-label .label-text {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      line-height: 1.3;
+    }
+
+    .phase.verify .phase-label .dot        { background: var(--ship); }
+    .phase.verify .phase-label .label-text { color: var(--ship); }
+    .phase.ship-p .phase-label .dot        { background: var(--ship); opacity: 0.55; }
+    .phase.ship-p .phase-label .label-text { color: var(--ship); opacity: 0.55; }
+
+    .nodes {
+      flex: 1;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 0 14px 16px;
+      border-left: 1px solid var(--border);
+    }
+
+    /* Transition */
+    .transition {
+      display: flex;
+      align-items: center;
+      padding: 4px 0;
+    }
+
+    .transition-gap { width: 110px; min-width: 110px; }
+
+    .transition-content {
+      flex: 1;
+      border-left: 1px solid var(--border);
+      padding-left: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-top: 5px;
+      padding-bottom: 5px;
+    }
+
+    .transition-arrow {
+      width: 1px;
+      background: var(--border);
+      height: 26px;
+      margin-left: 16px;
+      position: relative;
+    }
+
+    .transition-arrow::after {
+      content: '↓';
+      position: absolute;
+      bottom: -13px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .transition-label {
+      font-size: 0.63rem;
+      color: var(--muted);
+      padding-left: 10px;
+      font-style: italic;
+    }
+
+    /* ── Legend ── */
+    .legend {
+      max-width: 1120px;
+      margin: 28px auto 0;
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      padding: 0 2px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .legend-swatch {
+      width: 32px;
+      height: 20px;
+      border-radius: 5px;
+      border: 1px solid;
+      flex-shrink: 0;
+    }
+
+    /* ── Companion note ── */
+    .companion-note {
+      max-width: 1120px;
+      margin: 20px auto 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+    }
+
+    .companion-note .note-label {
+      font-size: 0.6rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--decide);
+      white-space: nowrap;
+      padding-top: 1px;
+    }
+
+    .companion-note .note-body {
+      font-size: 0.7rem;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+
+    .companion-note strong { color: var(--text); font-weight: 600; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Apple Product Builder — Vibe-Coder Workflow</h1>
+  <p>Scope decision first &nbsp;·&nbsp; Orange nodes = Claude Code /skills &nbsp;·&nbsp; Gray nodes = process steps</p>
+</header>
+
+<div class="workflow">
+
+  <!-- ── SCOPE DECISION ── -->
+  <div class="decision-row">
+    <div class="node-decision">
+      <div class="name">Idea / Goal</div>
+      <div class="desc">What am I actually building for my Mac?</div>
+    </div>
+  </div>
+
+  <div class="scope-connector">
+    <div class="scope-connector-legs"></div>
+    <div class="scope-labels">
+      <span class="scope-label">← no UI, no Xcode, no Swift</span>
+      <span class="scope-label">native .app or menu bar tool →</span>
+    </div>
+  </div>
+
+  <!-- ── FORK ── -->
+  <div class="fork">
+
+    <!-- SCRIPT / AUTOMATION TRACK -->
+    <div class="track automation">
+      <div class="track-header">Script / Automation Track</div>
+
+      <div class="track-phase">
+        <div class="track-phase-label">
+          <div class="dot"></div>
+          <div class="label-text">Phase 0<br>Discovery</div>
+        </div>
+        <div class="track-nodes">
+          <div class="node skill">
+            <div class="name">apple-automation</div>
+            <div class="desc">Input · output · trigger<br>edge cases · scale · done</div>
+            <div class="phase-note">confirms: ready to build? or too vague → app-prd first</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="track-phase">
+        <div class="track-phase-label">
+          <div class="dot"></div>
+          <div class="label-text">Phase 1<br>Architecture</div>
+        </div>
+        <div class="track-nodes">
+          <div class="node">
+            <div class="name">Tool Choice</div>
+            <div class="desc">Python vs. shell vs.<br>Apple Shortcuts</div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node">
+            <div class="name">Plan Doc</div>
+            <div class="desc">Components · packages<br>definition of done</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="track-phase">
+        <div class="track-phase-label">
+          <div class="dot"></div>
+          <div class="label-text">Phase 2<br>Build</div>
+        </div>
+        <div class="track-nodes">
+          <div class="node">
+            <div class="name">Single File First</div>
+            <div class="desc">Verify env · one file<br>then loop · dry run</div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node">
+            <div class="name">Error Handling + Log</div>
+            <div class="desc">Log every run, skip,<br>failure from day one</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="track-phase">
+        <div class="track-phase-label">
+          <div class="dot"></div>
+          <div class="label-text">Phase 3<br>Schedule</div>
+        </div>
+        <div class="track-nodes">
+          <div class="node">
+            <div class="name">launchd</div>
+            <div class="desc">Time-based: plist<br>→ ~/LaunchAgents/</div>
+          </div>
+          <div class="arrow">or</div>
+          <div class="node">
+            <div class="name">Folder Watcher</div>
+            <div class="desc">Event-based:<br>watchdog + launchd</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- NATIVE APP TRACK -->
+    <div class="track app-builder">
+      <div class="track-header">Native Mac / iOS App Track</div>
+
+      <div class="track-phase">
+        <div class="track-phase-label">
+          <div class="dot"></div>
+          <div class="label-text">Phase 0<br>Discovery</div>
+        </div>
+        <div class="track-nodes">
+          <div class="node skill">
+            <div class="name">apple-app-builder</div>
+            <div class="desc">Permissions · distribution<br>plan.md before any code</div>
+            <div class="phase-note">non-negotiable: skip this, waste hours</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="track-phase">
+        <div class="track-phase-label">
+          <div class="dot"></div>
+          <div class="label-text">Phase 1<br>Research</div>
+        </div>
+        <div class="track-nodes">
+          <div class="node">
+            <div class="name">Search GitHub First</div>
+            <div class="desc">80% coverage exists?<br>don't build from scratch</div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node">
+            <div class="name">Architecture Decision</div>
+            <div class="desc">Homebrew / Xcode /<br>Swift Package</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="track-phase">
+        <div class="track-phase-label">
+          <div class="dot"></div>
+          <div class="label-text">Phase 3<br>UX Design</div>
+        </div>
+        <div class="track-nodes">
+          <div class="node skill">
+            <div class="name">HUD Design</div>
+            <div class="desc">Recording · processing<br>states · auto-dismiss</div>
+            <div class="phase-note">apple-app-builder Phase 3</div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node skill">
+            <div class="name">Settings Design</div>
+            <div class="desc">Preview-driven · tabs<br>progressive disclosure</div>
+            <div class="phase-note">apple-app-builder Phase 3</div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node skill">
+            <div class="name">Onboarding</div>
+            <div class="desc">Permission → trigger<br>→ first use → done</div>
+            <div class="phase-note">apple-app-builder Phase 3</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="track-phase">
+        <div class="track-phase-label">
+          <div class="dot"></div>
+          <div class="label-text">Phase 4<br>Build</div>
+        </div>
+        <div class="track-nodes">
+          <div class="node">
+            <div class="name">Isolate + Verify Each</div>
+            <div class="desc">Core logic → hotkey →<br>audio → wire → UI last</div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node">
+            <div class="name">3-Attempt Rule</div>
+            <div class="desc">Same error 3× → stop<br>reassess architecture</div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="node">
+            <div class="name">macOS Gotchas</div>
+            <div class="desc">TCC · Info.plist<br>sandbox · CGEvent</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── CONVERGE ── -->
+  <div class="converge-label">both tracks converge</div>
+
+  <div class="transition">
+    <div class="transition-gap"></div>
+    <div class="transition-content">
+      <div class="transition-arrow"></div>
+      <div class="transition-label">script runs correctly on a full batch / app components verified in isolation</div>
+    </div>
+  </div>
+
+  <!-- ── VERIFY & REVIEW ── -->
+  <div class="phase verify">
+    <div class="phase-label">
+      <div class="dot"></div>
+      <div class="label-text">Verify &amp; Review</div>
+    </div>
+    <div class="nodes">
+      <div class="node skill">
+        <div class="name">/verify</div>
+        <div class="desc">Run the app · observe<br>actual behavior in context</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node skill">
+        <div class="name">/code-review</div>
+        <div class="desc">Correctness bugs<br>simplification</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="node skill">
+        <div class="name">/security-review</div>
+        <div class="desc">Permissions · data<br>handling · sandbox</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="transition">
+    <div class="transition-gap"></div>
+    <div class="transition-content">
+      <div class="transition-arrow"></div>
+      <div class="transition-label">review passed</div>
+    </div>
+  </div>
+
+  <!-- ── SHIP ── -->
+  <div class="phase ship-p">
+    <div class="phase-label">
+      <div class="dot"></div>
+      <div class="label-text">Ship</div>
+    </div>
+    <div class="nodes">
+      <div class="node">
+        <div class="name">Script: Activate Schedule</div>
+        <div class="desc">launchctl load · verify<br>trigger fires on schedule</div>
+      </div>
+      <div class="arrow">or</div>
+      <div class="node">
+        <div class="name">App: Sign + Distribute</div>
+        <div class="desc">Homebrew formula /<br>notarize / App Store</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Legend -->
+<div class="legend">
+  <div class="legend-item">
+    <div class="legend-swatch" style="background:rgba(251,146,60,0.05);border-color:rgba(251,146,60,0.45);"></div>
+    Claude Code /skill invoked
+  </div>
+  <div class="legend-item">
+    <div class="legend-swatch" style="background:var(--surface);border-color:var(--border);"></div>
+    Process step / decision
+  </div>
+  <div class="legend-item">
+    <div class="legend-swatch" style="background:rgba(34,211,238,0.04);border-color:rgba(34,211,238,0.25);"></div>
+    Script / Automation track
+  </div>
+  <div class="legend-item">
+    <div class="legend-swatch" style="background:rgba(129,140,248,0.04);border-color:rgba(129,140,248,0.25);"></div>
+    Native App track
+  </div>
+</div>
+
+<!-- Companion note -->
+<div class="companion-note">
+  <div class="note-label">Why this map</div>
+  <div class="note-body">
+    <strong>Orientation before execution.</strong> The skill files (/apple-automation, /apple-app-builder) are the playbook for each node — they contain the phase-by-phase checklists, the macOS-specific gotchas, and the build discipline. This map answers "which skill do I pick up, and when?" — something the skill files can't answer from inside themselves. Start here at the top of any new project session to locate yourself, then invoke the matching skill to get the details.
+  </div>
+</div>
+
+</body>
+</html>
