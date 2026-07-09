@@ -78,40 +78,22 @@ def fetch_page_text(url: str, timeout: int = 10) -> Optional[str]:
 
 # ── Podcast transcript ────────────────────────────────────────────────────────
 
-def extract_podcast_transcript(url: str) -> tuple[Optional[str], str]:
-    """
-    Returns (transcript_text, source_note).
-    Tries YouTube first, falls back to page fetch.
+def load_transcript_file(path: str) -> tuple[Optional[str], str]:
+    """Read a pre-extracted .txt transcript from disk (e.g. from Apple Podcasts extractor)."""
+    try:
+        text = Path(path).read_text(encoding="utf-8")[:12000]
+        filename = Path(path).name
+        return text, f"Local transcript file ({filename})"
+    except Exception as e:
+        return None, f"Could not read transcript file {path}: {e}"
 
-    To swap in your own transcript extractor script, set PODCAST_EXTRACTOR_PATH
-    to its path and it will be called as: <script> <url>
-    """
-    # Check for an external extractor script first
-    extractor_path = os.getenv("PODCAST_EXTRACTOR_PATH")
-    if extractor_path and Path(extractor_path).exists():
-        return _external_extractor(extractor_path, url)
 
+def extract_podcast_url(url: str) -> tuple[Optional[str], str]:
+    """Extract transcript from a URL. Handles YouTube directly; fetches page text otherwise."""
     youtube_id = _extract_youtube_id(url)
     if youtube_id:
         return _youtube_transcript(youtube_id)
-
     return _fetch_page_transcript(url)
-
-
-def _external_extractor(script_path: str, url: str) -> tuple[Optional[str], str]:
-    import subprocess
-    try:
-        result = subprocess.run(
-            [sys.executable, script_path, url],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()[:12000], f"External extractor ({script_path})"
-        return None, f"External extractor failed (exit {result.returncode}): {result.stderr[:200]}"
-    except Exception as e:
-        return None, f"External extractor error: {e}"
 
 
 def _extract_youtube_id(url: str) -> Optional[str]:
@@ -161,7 +143,7 @@ class SourceBundle:
         return "\n\n".join(f"=== {label} ===\n{text}" for label, text in self.sections)
 
 
-def gather_sources(name: str, company: str, role: str, podcast_url: Optional[str]) -> SourceBundle:
+def gather_sources(name: str, company: str, role: str, podcast_url: Optional[str], transcript_file: Optional[str] = None) -> SourceBundle:
     bundle = SourceBundle()
 
     # 1. Sharebird — highest signal for PMM/GTM practitioners
@@ -208,13 +190,21 @@ def gather_sources(name: str, company: str, role: str, podcast_url: Optional[str
         bundle.flag("Web interviews", "no results found")
 
     # 4. Podcast transcript
-    if podcast_url:
-        console.print(f"[dim]  Extracting transcript from podcast URL...[/dim]")
-        transcript, note = extract_podcast_transcript(podcast_url)
+    if transcript_file:
+        # Pre-extracted .txt file from Apple Podcasts extractor skill
+        console.print(f"[dim]  Loading transcript file...[/dim]")
+        transcript, note = load_transcript_file(transcript_file)
         if transcript:
             bundle.add(f"Podcast transcript ({note})", transcript)
         else:
-            bundle.flag("Podcast", note)
+            bundle.flag("Transcript file", note)
+    elif podcast_url:
+        console.print(f"[dim]  Extracting transcript from podcast URL...[/dim]")
+        transcript, note = extract_podcast_url(podcast_url)
+        if transcript:
+            bundle.add(f"Podcast transcript ({note})", transcript)
+        else:
+            bundle.flag("Podcast URL", note)
     else:
         # Try to discover a podcast episode
         console.print("[dim]  Searching for podcast appearances...[/dim]")
@@ -322,16 +312,19 @@ def save_brief(name: str, brief: str, out_dir: str) -> Path:
 @click.argument("company")
 @click.argument("role")
 @click.option("--podcast", default=None, metavar="URL",
-              help="Podcast episode URL (YouTube, RSS page, or any web page with a transcript)")
+              help="YouTube URL to extract transcript from directly")
+@click.option("--transcript", default=None, metavar="FILE",
+              help="Path to a pre-extracted .txt transcript (from the Apple Podcasts extractor skill)")
 @click.option("--out", default="./briefs", show_default=True, metavar="DIR",
               help="Directory to write the markdown brief")
-def main(name: str, company: str, role: str, podcast: Optional[str], out: str):
+def main(name: str, company: str, role: str, podcast: Optional[str], transcript: Optional[str], out: str):
     """Research a person and generate a pre-conversation interview brief.
 
     \b
     Examples:
       python prep.py "Sarah Chen" "Notion" "Head of PMM"
       python prep.py "Sarah Chen" "Notion" "Head of PMM" --podcast https://youtu.be/xyz
+      python prep.py "Sarah Chen" "Notion" "Head of PMM" --transcript ~/Downloads/episode.txt
       python prep.py "Sarah Chen" "Notion" "Head of PMM" --out ~/notes/briefs
     """
     if not os.getenv("ANTHROPIC_API_KEY"):
@@ -345,7 +338,7 @@ def main(name: str, company: str, role: str, podcast: Optional[str], out: str):
     ))
 
     console.print("\n[bold]Gathering sources[/bold]")
-    bundle = gather_sources(name, company, role, podcast)
+    bundle = gather_sources(name, company, role, podcast, transcript_file=transcript)
 
     console.print()
     if bundle.sections:
