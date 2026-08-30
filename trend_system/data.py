@@ -64,6 +64,56 @@ class YFinanceLoader:
         return out
 
 
+class LocalParquetLoader:
+    """Reads a directory of per-symbol `{SYMBOL}.parquet` files -- the same
+    layout sma-scanner's `price_cache_refresh.py` maintains at
+    `~/sma-scanner/data/price_cache/` (mirrored to Google Drive under
+    `My Drive/Trading - Historical Data/sma-scanner-price-cache/price_cache/`).
+    Schema: columns `Date, Open, High, Low, Close, Volume`, `Date` as a
+    datetime64 column (not the index) -- normalized to a DatetimeIndex here
+    to match what the rest of this system expects.
+
+    This is the loader to point at the real, already-fetched universe
+    instead of re-pulling from yfinance. Point `cache_dir` at the local
+    cache directly (fastest, no network, always current) or at a synced
+    Drive folder. Note this cache is still current-constituents-only, same
+    survivorship-bias caveat as universe.py.
+    """
+
+    def __init__(self, cache_dir: str):
+        self.cache_dir = Path(cache_dir)
+        if not self.cache_dir.exists():
+            raise FileNotFoundError(f"price cache dir not found: {cache_dir}")
+
+    def available_symbols(self) -> list[str]:
+        return sorted(p.stem for p in self.cache_dir.glob("*.parquet"))
+
+    def get(
+        self,
+        symbols: Iterable[str],
+        start: str,
+        end: Optional[str] = None,
+        refresh: bool = False,
+    ) -> Dict[str, pd.DataFrame]:
+        out: Dict[str, pd.DataFrame] = {}
+        start_ts = pd.Timestamp(start)
+        end_ts = pd.Timestamp(end) if end else None
+        for symbol in symbols:
+            path = self.cache_dir / f"{symbol}.parquet"
+            if not path.exists():
+                continue
+            df = pd.read_parquet(path)
+            df["Date"] = pd.to_datetime(df["Date"]).dt.tz_localize(None)
+            df = df.set_index("Date").sort_index()
+            df.index.name = "date"
+            df = df[df.index >= start_ts]
+            if end_ts is not None:
+                df = df[df.index <= end_ts]
+            if not df.empty:
+                out[symbol] = df[["Open", "High", "Low", "Close", "Volume"]]
+        return out
+
+
 class SyntheticLoader:
     """Deterministic synthetic OHLCV generator for offline testing of the
     screener/sizing/backtest logic when there's no market data access
