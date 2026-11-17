@@ -1,0 +1,42 @@
+//@version=6
+indicator("End of Trading Week Highlight", shorttitle = "EOW", overlay = true)
+
+// ─── Inputs ──────────────────────────────────────────────────────────────────
+highlightColor = input.color(color.new(color.yellow, 80), "Highlight color")
+endDayInput    = input.string("Friday", "Normal last trading day of the week",
+     options = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+     tooltip = "Used on intraday charts and for the current, still-open week. " +
+               "On daily charts, completed weeks are detected automatically, so a " +
+               "holiday-shortened week (e.g. Thursday close) is highlighted correctly.")
+showIntraday   = input.bool(true, "Highlight on intraday charts")
+
+endDay = switch endDayInput
+    "Monday"    => dayofweek.monday
+    "Tuesday"   => dayofweek.tuesday
+    "Wednesday" => dayofweek.wednesday
+    "Thursday"  => dayofweek.thursday
+    "Saturday"  => dayofweek.saturday
+    "Sunday"    => dayofweek.sunday
+    => dayofweek.friday
+
+// Day of week of the bar's trading day (time_tradingday is 00:00 UTC of that day,
+// so evaluate it in UTC to avoid shifting into the previous calendar day).
+tradingDow = dayofweek(time_tradingday, "UTC")
+
+// ─── Daily charts ────────────────────────────────────────────────────────────
+// When a new week starts, the bar before it was the last trading day of the
+// previous week. Color that bar by shifting the background one bar back.
+// This handles holiday-shortened weeks exactly.
+newWeek = timeframe.change("W")
+bgcolor(timeframe.isdaily and newWeek and bar_index > 0 ? highlightColor : na,
+     offset = -1, title = "Week end (confirmed)")
+
+// The current week has no "next week" bar yet, so fall back to the weekday rule
+// for the most recent bar.
+bgcolor(timeframe.isdaily and barstate.islast and tradingDow == endDay ? highlightColor : na,
+     title = "Week end (current week)")
+
+// ─── Intraday charts ─────────────────────────────────────────────────────────
+// Highlight every bar belonging to the last trading day of the week.
+bgcolor(showIntraday and timeframe.isintraday and tradingDow == endDay ? highlightColor : na,
+     title = "Week end (intraday)")
