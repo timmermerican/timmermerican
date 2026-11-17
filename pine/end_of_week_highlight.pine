@@ -4,11 +4,21 @@ indicator("End of Trading Week Highlight", shorttitle = "EOW", overlay = true)
 // ─── Inputs ──────────────────────────────────────────────────────────────────
 highlightColor = input.color(color.new(color.yellow, 80), "Highlight color")
 endDayInput    = input.string("Friday", "Normal last trading day of the week",
-     options = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
-     tooltip = "Used on intraday charts and for the current, still-open week. " +
-               "On daily charts, completed weeks are detected automatically, so a " +
-               "holiday-shortened week (e.g. Thursday close) is highlighted correctly.")
+     options = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])
 showIntraday   = input.bool(true, "Highlight on intraday charts")
+holidayInput   = input.text_area(
+     "2025-04-18, 2025-07-04,\n" +
+     "2026-04-03, 2026-06-19, 2026-07-03, 2026-12-25,\n" +
+     "2027-01-01, 2027-03-26, 2027-06-18, 2027-12-24",
+     "Market holidays (YYYY-MM-DD)",
+     tooltip = "Dates the market is fully closed, separated by commas, spaces or new lines. " +
+               "If the normal last trading day (and any days before it) are holidays, the " +
+               "previous open day is highlighted instead. Defaults are US stock market " +
+               "(NYSE/Nasdaq) closures that fall on a Friday; check them against your " +
+               "exchange's calendar and add new years as needed.")
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+DAY_MS = 86400000
 
 endDay = switch endDayInput
     "Monday"    => dayofweek.monday
@@ -19,24 +29,52 @@ endDay = switch endDayInput
     "Sunday"    => dayofweek.sunday
     => dayofweek.friday
 
-// Day of week of the bar's trading day (time_tradingday is 00:00 UTC of that day,
-// so evaluate it in UTC to avoid shifting into the previous calendar day).
-tradingDow = dayofweek(time_tradingday, "UTC")
+// Position within a Monday-first week: Monday = 0 ... Sunday = 6.
+weekIndex(int dow) => (dow + 5) % 7
+
+// Parse the holiday list once into timestamps at 00:00 UTC, which is the same
+// convention time_tradingday uses.
+var array<int> holidays = array.new<int>()
+if barstate.isfirst
+    cleaned = str.replace_all(str.replace_all(str.replace_all(holidayInput, "\n", ","), " ", ","), ";", ",")
+    for s in str.split(cleaned, ",")
+        if str.length(s) == 10
+            y = str.tonumber(str.substring(s, 0, 4))
+            m = str.tonumber(str.substring(s, 5, 7))
+            d = str.tonumber(str.substring(s, 8, 10))
+            if not na(y) and not na(m) and not na(d)
+                holidays.push(timestamp("UTC", int(y), int(m), int(d), 0, 0))
+
+isHoliday(int t) => holidays.includes(t)
+
+// A trading day is the last of its week if it is not a holiday, it falls on or
+// before the normal last day, and every day after it up to that normal last day
+// is a holiday.
+isLastTradingDay(int t) =>
+    dayIdx = weekIndex(dayofweek(t, "UTC"))
+    endIdx = weekIndex(endDay)
+    result = not isHoliday(t) and dayIdx <= endIdx
+    if result and dayIdx < endIdx
+        for i = 1 to endIdx - dayIdx
+            if not isHoliday(t + i * DAY_MS)
+                result := false
+                break
+    result
+
+lastDay = isLastTradingDay(time_tradingday)
 
 // ─── Daily charts ────────────────────────────────────────────────────────────
-// When a new week starts, the bar before it was the last trading day of the
-// previous week. Color that bar by shifting the background one bar back.
-// This handles holiday-shortened weeks exactly.
+// Finished weeks: when a new week starts, the bar before it was the last trading
+// day of the previous week. This is exact even for holidays missing from the list.
 newWeek = timeframe.change("W")
 bgcolor(timeframe.isdaily and newWeek and bar_index > 0 ? highlightColor : na,
-     offset = -1, title = "Week end (confirmed)")
+     offset = -1, title = "Week end (finished weeks)")
 
-// The current week has no "next week" bar yet, so fall back to the weekday rule
-// for the most recent bar.
-bgcolor(timeframe.isdaily and barstate.islast and tradingDow == endDay ? highlightColor : na,
+// Current week: no next-week bar exists yet, so use the holiday-aware rule.
+bgcolor(timeframe.isdaily and barstate.islast and lastDay ? highlightColor : na,
      title = "Week end (current week)")
 
 // ─── Intraday charts ─────────────────────────────────────────────────────────
 // Highlight every bar belonging to the last trading day of the week.
-bgcolor(showIntraday and timeframe.isintraday and tradingDow == endDay ? highlightColor : na,
+bgcolor(showIntraday and timeframe.isintraday and lastDay ? highlightColor : na,
      title = "Week end (intraday)")
