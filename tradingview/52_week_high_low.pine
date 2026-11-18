@@ -1,0 +1,103 @@
+//@version=6
+indicator("52-Week High / Low", shorttitle = "52W H/L", overlay = true, max_bars_back = 5000, max_labels_count = 500)
+
+// ───────────────────────── Inputs ─────────────────────────
+lookbackWeeks = input.int(52, "Lookback (weeks)", minval = 1, maxval = 260)
+useWicks      = input.bool(true, "Use wicks (high/low)", tooltip = "Off = use closing prices instead of intrabar highs/lows.")
+
+grpStyle   = "Style"
+hiColor    = input.color(color.new(color.teal, 0), "High line", group = grpStyle)
+loColor    = input.color(color.new(color.red, 0),  "Low line",  group = grpStyle)
+lineWidth  = input.int(2, "Line width", minval = 1, maxval = 4, group = grpStyle)
+showLabels = input.bool(true, "Show price labels on last bar", group = grpStyle)
+showMarks  = input.bool(true, "Mark new 52W highs/lows",        group = grpStyle)
+showTable  = input.bool(true, "Show distance table",            group = grpStyle)
+
+// ───────────────────────── Core ─────────────────────────
+lookbackMs = lookbackWeeks * 7 * 24 * 60 * 60 * 1000
+hiSrc = useWicks ? high : close
+loSrc = useWicks ? low  : close
+
+// Highest/lowest of all PRIOR bars whose open time falls inside the lookback window.
+// Excludes the current bar, so it never uses unfinished data (safe with lookahead_on).
+priorHL(series float h, series float l, int windowMs) =>
+    float hh = na
+    float ll = na
+    int i = 1
+    while i < 4999 and not na(time[i]) and time[i] > time - windowMs
+        hh := na(hh) ? h[i] : math.max(hh, h[i])
+        ll := na(ll) ? l[i] : math.min(ll, l[i])
+        i += 1
+    [hh, ll]
+
+newDay = timeframe.change("D")
+
+float priorHi = na
+float priorLo = na
+float curHi   = na
+float curLo   = na
+
+if timeframe.isintraday
+    // Prior completed days come from the daily series; today is tracked live on the chart.
+    [dh, dl] = request.security(syminfo.tickerid, "D", priorHL(hiSrc, loSrc, lookbackMs), lookahead = barmerge.lookahead_on)
+    priorHi := dh
+    priorLo := dl
+    var float dayHi = na
+    var float dayLo = na
+    if newDay or na(dayHi)
+        dayHi := hiSrc
+        dayLo := loSrc
+    else
+        dayHi := math.max(dayHi, hiSrc)
+        dayLo := math.min(dayLo, loSrc)
+    curHi := dayHi
+    curLo := dayLo
+else
+    // Daily / weekly / monthly charts: compute directly on the chart's own bars.
+    [ch, cl] = priorHL(hiSrc, loSrc, lookbackMs)
+    priorHi := ch
+    priorLo := cl
+    curHi := hiSrc
+    curLo := loSrc
+
+hi52 = na(priorHi) ? curHi : math.max(priorHi, curHi)
+lo52 = na(priorLo) ? curLo : math.min(priorLo, curLo)
+
+// A new extreme is set when this bar pushes past the level that stood on the previous bar.
+newHigh = not na(hi52[1]) and hiSrc > hi52[1]
+newLow  = not na(lo52[1]) and loSrc < lo52[1]
+
+// ───────────────────────── Plots ─────────────────────────
+plot(hi52, "52W High", hiColor, lineWidth, plot.style_stepline)
+plot(lo52, "52W Low",  loColor, lineWidth, plot.style_stepline)
+
+plotshape(showMarks and newHigh, "New 52W High", shape.triangleup,   location.abovebar, hiColor, size = size.tiny)
+plotshape(showMarks and newLow,  "New 52W Low",  shape.triangledown, location.belowbar, loColor, size = size.tiny)
+
+pctFrom(level) => (close - level) / level * 100
+
+var label hiLbl = na
+var label loLbl = na
+if showLabels and barstate.islast
+    label.delete(hiLbl)
+    label.delete(loLbl)
+    hiLbl := label.new(bar_index, hi52, str.format("52W H {0}  ({1,number,#.##}%)", str.tostring(hi52, format.mintick), pctFrom(hi52)),
+                       style = label.style_label_left, color = color.new(hiColor, 80), textcolor = hiColor, size = size.small)
+    loLbl := label.new(bar_index, lo52, str.format("52W L {0}  (+{1,number,#.##}%)", str.tostring(lo52, format.mintick), pctFrom(lo52)),
+                       style = label.style_label_left, color = color.new(loColor, 80), textcolor = loColor, size = size.small)
+
+var table tbl = table.new(position.top_right, 2, 4, bgcolor = color.new(color.gray, 85), border_width = 1)
+if showTable and barstate.islast
+    rangePos = hi52 == lo52 ? 100.0 : (close - lo52) / (hi52 - lo52) * 100
+    table.cell(tbl, 0, 0, "52W High",       text_color = hiColor, text_size = size.small)
+    table.cell(tbl, 1, 0, str.tostring(hi52, format.mintick), text_color = hiColor, text_size = size.small)
+    table.cell(tbl, 0, 1, "52W Low",        text_color = loColor, text_size = size.small)
+    table.cell(tbl, 1, 1, str.tostring(lo52, format.mintick), text_color = loColor, text_size = size.small)
+    table.cell(tbl, 0, 2, "From high",      text_size = size.small, text_color = chart.fg_color)
+    table.cell(tbl, 1, 2, str.tostring(pctFrom(hi52), "#.##") + "%", text_size = size.small, text_color = chart.fg_color)
+    table.cell(tbl, 0, 3, "Range position", text_size = size.small, text_color = chart.fg_color)
+    table.cell(tbl, 1, 3, str.tostring(rangePos, "#.#") + "%", text_size = size.small, text_color = chart.fg_color)
+
+// ───────────────────────── Alerts ─────────────────────────
+alertcondition(newHigh, "New 52-week high", "{{ticker}} made a new 52-week high at {{high}}")
+alertcondition(newLow,  "New 52-week low",  "{{ticker}} made a new 52-week low at {{low}}")

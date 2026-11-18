@@ -8,3 +8,7 @@
 timmermerican/timmermerican is a ✨ special ✨ repository because its `README.md` (this file) appears on your GitHub profile.
 You can click the Preview link to take a look at your changes.
 --->
+
+## TradingView
+
+- [`tradingview/52_week_high_low.pine`](tradingview/52_week_high_low.pine) — 52-week high/low indicator (Pine Script v6). Paste into the Pine Editor and click *Add to chart*.
