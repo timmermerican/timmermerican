@@ -123,29 +123,32 @@ plot(loLvl, "Lookback Low",  loColor, lineWidth, plot.style_stepline)
 plotshape(showMarks and newHigh, "New High", shape.triangleup,   location.abovebar, hiColor, size = size.tiny)
 plotshape(showMarks and newLow,  "New Low",  shape.triangledown, location.belowbar, loColor, size = size.tiny)
 
-pctFrom(level) => (close - level) / level * 100
+// % move needed from the current price to reach a level (positive = up, negative = down).
+pctTo(level) => (level - close) / close * 100
 
 var label hiLbl = na
 var label loLbl = na
 if showLabels and barstate.islast
     label.delete(hiLbl)
     label.delete(loLbl)
-    hiLbl := label.new(bar_index, hiLvl, str.format("{0} H {1}  ({2,number,#.##}%)", lenTxt, str.tostring(hiLvl, format.mintick), pctFrom(hiLvl)),
+    hiLbl := label.new(bar_index, hiLvl, str.format("{0} H {1}  (+{2,number,0.00}% to reach)", lenTxt, str.tostring(hiLvl, format.mintick), pctTo(hiLvl)),
                        style = label.style_label_left, color = color.new(hiColor, 80), textcolor = hiColor, size = size.small)
-    loLbl := label.new(bar_index, loLvl, str.format("{0} L {1}  (+{2,number,#.##}%)", lenTxt, str.tostring(loLvl, format.mintick), pctFrom(loLvl)),
+    loLbl := label.new(bar_index, loLvl, str.format("{0} L {1}  ({2,number,0.00}% to reach)", lenTxt, str.tostring(loLvl, format.mintick), pctTo(loLvl)),
                        style = label.style_label_left, color = color.new(loColor, 80), textcolor = loColor, size = size.small)
 
-var table tbl = table.new(position.top_right, 2, 4, bgcolor = color.new(color.gray, 85), border_width = 1)
+var table tbl = table.new(position.top_right, 2, 5, bgcolor = color.new(color.gray, 85), border_width = 1)
 if showTable and barstate.islast
     rangePos = hiLvl == loLvl ? 100.0 : (close - loLvl) / (hiLvl - loLvl) * 100
     table.cell(tbl, 0, 0, lenTxt + " High",  text_color = hiColor, text_size = size.small)
     table.cell(tbl, 1, 0, str.tostring(hiLvl, format.mintick), text_color = hiColor, text_size = size.small)
     table.cell(tbl, 0, 1, lenTxt + " Low",   text_color = loColor, text_size = size.small)
     table.cell(tbl, 1, 1, str.tostring(loLvl, format.mintick), text_color = loColor, text_size = size.small)
-    table.cell(tbl, 0, 2, "From high",       text_size = size.small, text_color = chart.fg_color)
-    table.cell(tbl, 1, 2, str.tostring(pctFrom(hiLvl), "#.##") + "%", text_size = size.small, text_color = chart.fg_color)
-    table.cell(tbl, 0, 3, "Range position",  text_size = size.small, text_color = chart.fg_color)
-    table.cell(tbl, 1, 3, str.tostring(rangePos, "#.#") + "%", text_size = size.small, text_color = chart.fg_color)
+    table.cell(tbl, 0, 2, "Upside to high",   text_size = size.small, text_color = hiColor)
+    table.cell(tbl, 1, 2, "+" + str.tostring(pctTo(hiLvl), "0.00") + "%", text_size = size.small, text_color = hiColor)
+    table.cell(tbl, 0, 3, "Downside to low",  text_size = size.small, text_color = loColor)
+    table.cell(tbl, 1, 3, str.tostring(pctTo(loLvl), "0.00") + "%", text_size = size.small, text_color = loColor)
+    table.cell(tbl, 0, 4, "Range position",   text_size = size.small, text_color = chart.fg_color)
+    table.cell(tbl, 1, 4, str.tostring(rangePos, "0.0") + "%", text_size = size.small, text_color = chart.fg_color)
 
 // ───────────────────────── Alerts ─────────────────────────
 alertcondition(newHigh, "New lookback high", "{{ticker}} made a new lookback high at {{high}}")
