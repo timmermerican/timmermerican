@@ -2,25 +2,52 @@
 indicator("52-Week High / Low", shorttitle = "52W H/L", overlay = true, max_bars_back = 5000, max_labels_count = 500)
 
 // ───────────────────────── Inputs ─────────────────────────
-lookbackWeeks = input.int(52, "Lookback (weeks)", minval = 1, maxval = 260)
-useWicks      = input.bool(true, "Use wicks (high/low)", tooltip = "Off = use closing prices instead of intrabar highs/lows.")
+grpLb = "Lookback"
+MODE_CAL  = "Calendar (weeks)"
+MODE_BARS = "Bars"
+mode          = input.string(MODE_CAL, "Lookback type", options = [MODE_CAL, MODE_BARS], group = grpLb,
+                 tooltip = "Calendar: a span of time (52 weeks = one year), however many bars that is.\nBars: a fixed number of bars on the selected timeframe, e.g. 252 bars on D = 252-day high/low.")
+lookbackWeeks = input.int(52,  "Weeks (calendar)", minval = 1, maxval = 520,  group = grpLb)
+lookbackBars  = input.int(252, "Bars (bars mode)", minval = 2, maxval = 4999, group = grpLb)
+
+TF_AUTO   = "Auto"
+TF_CHART  = "Chart"
+TF_CUSTOM = "Custom"
+tfSource = input.string(TF_AUTO, "Timeframe", options = [TF_AUTO, TF_CHART, TF_CUSTOM], group = grpLb,
+             tooltip = "Auto: daily bars on intraday charts, the chart's own bars otherwise.\nChart: always the chart's timeframe.\nCustom: the timeframe below. It must be the same as or higher than the chart's.")
+tfCustom = input.timeframe("D", "Custom timeframe", group = grpLb)
+
+useWicks = input.bool(true, "Use wicks (high/low)", group = grpLb, tooltip = "Off = use closing prices instead of highs/lows.")
 
 grpStyle   = "Style"
 hiColor    = input.color(color.new(color.teal, 0), "High line", group = grpStyle)
 loColor    = input.color(color.new(color.red, 0),  "Low line",  group = grpStyle)
 lineWidth  = input.int(2, "Line width", minval = 1, maxval = 4, group = grpStyle)
 showLabels = input.bool(true, "Show price labels on last bar", group = grpStyle)
-showMarks  = input.bool(true, "Mark new 52W highs/lows",        group = grpStyle)
-showTable  = input.bool(true, "Show distance table",            group = grpStyle)
+showMarks  = input.bool(true, "Mark new highs/lows",           group = grpStyle)
+showTable  = input.bool(true, "Show distance table",           group = grpStyle)
 
-// ───────────────────────── Core ─────────────────────────
+// ───────────────────────── Setup ─────────────────────────
+isCal      = mode == MODE_CAL
 lookbackMs = lookbackWeeks * 7 * 24 * 60 * 60 * 1000
-hiSrc = useWicks ? high : close
-loSrc = useWicks ? low  : close
+hiSrc      = useWicks ? high : close
+loSrc      = useWicks ? low  : close
 
-// Highest/lowest of all PRIOR bars whose open time falls inside the lookback window.
-// Excludes the current bar, so it never uses unfinished data (safe with lookahead_on).
-priorHL(series float h, series float l, int windowMs) =>
+tf = switch tfSource
+    TF_CHART  => timeframe.period
+    TF_CUSTOM => tfCustom
+    => timeframe.isintraday ? "D" : timeframe.period
+
+tfSec    = timeframe.in_seconds(tf)
+chartSec = timeframe.in_seconds(timeframe.period)
+onChart  = tfSec == chartSec
+
+if barstate.isfirst and tfSec < chartSec
+    runtime.error("Lookback timeframe (" + tf + ") is lower than the chart timeframe. Pick a timeframe equal to or higher than the chart's.")
+
+// ───────────────────────── Helpers ─────────────────────────
+// Calendar mode: extremes of all PRIOR bars whose open time falls inside the window.
+priorCalHL(series float h, series float l, int windowMs) =>
     float hh = na
     float ll = na
     int i = 1
@@ -30,49 +57,71 @@ priorHL(series float h, series float l, int windowMs) =>
         i += 1
     [hh, ll]
 
-newDay = timeframe.change("D")
+// Bars mode: extremes of the n bars BEFORE the current one.
+priorBarsHL(series float h, series float l, simple int n) =>
+    [ta.highest(h, n)[1], ta.lowest(l, n)[1]]
+
+// Both helpers exclude the current bar, so with lookahead_on they never use
+// unfinished higher-timeframe data and the lines don't repaint.
+
+tfText(string t) =>
+    float mins = str.tonumber(t)
+    na(mins) ? t : mins % 60 == 0 ? str.tostring(mins / 60, "#") + "h" : str.tostring(mins, "#") + "m"
+
+// ───────────────────────── Core ─────────────────────────
+[chartBarsHi, chartBarsLo] = priorBarsHL(hiSrc, loSrc, lookbackBars - 1)
 
 float priorHi = na
 float priorLo = na
-float curHi   = na
-float curLo   = na
 
-if timeframe.isintraday
-    // Prior completed days come from the daily series; today is tracked live on the chart.
-    [dh, dl] = request.security(syminfo.tickerid, "D", priorHL(hiSrc, loSrc, lookbackMs), lookahead = barmerge.lookahead_on)
-    priorHi := dh
-    priorLo := dl
-    var float dayHi = na
-    var float dayLo = na
-    if newDay or na(dayHi)
-        dayHi := hiSrc
-        dayLo := loSrc
+if onChart
+    if isCal
+        [ch, cl] = priorCalHL(hiSrc, loSrc, lookbackMs)
+        priorHi := ch
+        priorLo := cl
     else
-        dayHi := math.max(dayHi, hiSrc)
-        dayLo := math.min(dayLo, loSrc)
-    curHi := dayHi
-    curLo := dayLo
+        priorHi := chartBarsHi
+        priorLo := chartBarsLo
 else
-    // Daily / weekly / monthly charts: compute directly on the chart's own bars.
-    [ch, cl] = priorHL(hiSrc, loSrc, lookbackMs)
-    priorHi := ch
-    priorLo := cl
-    curHi := hiSrc
-    curLo := loSrc
+    if isCal
+        [sh, sl] = request.security(syminfo.tickerid, tf, priorCalHL(hiSrc, loSrc, lookbackMs), lookahead = barmerge.lookahead_on)
+        priorHi := sh
+        priorLo := sl
+    else
+        [sh, sl] = request.security(syminfo.tickerid, tf, priorBarsHL(hiSrc, loSrc, lookbackBars - 1), lookahead = barmerge.lookahead_on)
+        priorHi := sh
+        priorLo := sl
 
-hi52 = na(priorHi) ? curHi : math.max(priorHi, curHi)
-lo52 = na(priorLo) ? curLo : math.min(priorLo, curLo)
+// The still-forming higher-timeframe bar is tracked live on the chart.
+htfNew = timeframe.change(tf)
+var float runHi = na
+var float runLo = na
+if htfNew or na(runHi)
+    runHi := high
+    runLo := low
+else
+    runHi := math.max(runHi, high)
+    runLo := math.min(runLo, low)
+
+// In close mode the forming bar's "close" is simply the current close.
+curHi = onChart or not useWicks ? hiSrc : runHi
+curLo = onChart or not useWicks ? loSrc : runLo
+
+hiLvl = na(priorHi) ? curHi : math.max(priorHi, curHi)
+loLvl = na(priorLo) ? curLo : math.min(priorLo, curLo)
 
 // A new extreme is set when this bar pushes past the level that stood on the previous bar.
-newHigh = not na(hi52[1]) and hiSrc > hi52[1]
-newLow  = not na(lo52[1]) and loSrc < lo52[1]
+newHigh = not na(hiLvl[1]) and hiSrc > hiLvl[1]
+newLow  = not na(loLvl[1]) and loSrc < loLvl[1]
+
+lenTxt = isCal ? str.tostring(lookbackWeeks) + "W" : str.tostring(lookbackBars) + " × " + tfText(tf)
 
 // ───────────────────────── Plots ─────────────────────────
-plot(hi52, "52W High", hiColor, lineWidth, plot.style_stepline)
-plot(lo52, "52W Low",  loColor, lineWidth, plot.style_stepline)
+plot(hiLvl, "Lookback High", hiColor, lineWidth, plot.style_stepline)
+plot(loLvl, "Lookback Low",  loColor, lineWidth, plot.style_stepline)
 
-plotshape(showMarks and newHigh, "New 52W High", shape.triangleup,   location.abovebar, hiColor, size = size.tiny)
-plotshape(showMarks and newLow,  "New 52W Low",  shape.triangledown, location.belowbar, loColor, size = size.tiny)
+plotshape(showMarks and newHigh, "New High", shape.triangleup,   location.abovebar, hiColor, size = size.tiny)
+plotshape(showMarks and newLow,  "New Low",  shape.triangledown, location.belowbar, loColor, size = size.tiny)
 
 pctFrom(level) => (close - level) / level * 100
 
@@ -81,23 +130,23 @@ var label loLbl = na
 if showLabels and barstate.islast
     label.delete(hiLbl)
     label.delete(loLbl)
-    hiLbl := label.new(bar_index, hi52, str.format("52W H {0}  ({1,number,#.##}%)", str.tostring(hi52, format.mintick), pctFrom(hi52)),
+    hiLbl := label.new(bar_index, hiLvl, str.format("{0} H {1}  ({2,number,#.##}%)", lenTxt, str.tostring(hiLvl, format.mintick), pctFrom(hiLvl)),
                        style = label.style_label_left, color = color.new(hiColor, 80), textcolor = hiColor, size = size.small)
-    loLbl := label.new(bar_index, lo52, str.format("52W L {0}  (+{1,number,#.##}%)", str.tostring(lo52, format.mintick), pctFrom(lo52)),
+    loLbl := label.new(bar_index, loLvl, str.format("{0} L {1}  (+{2,number,#.##}%)", lenTxt, str.tostring(loLvl, format.mintick), pctFrom(loLvl)),
                        style = label.style_label_left, color = color.new(loColor, 80), textcolor = loColor, size = size.small)
 
 var table tbl = table.new(position.top_right, 2, 4, bgcolor = color.new(color.gray, 85), border_width = 1)
 if showTable and barstate.islast
-    rangePos = hi52 == lo52 ? 100.0 : (close - lo52) / (hi52 - lo52) * 100
-    table.cell(tbl, 0, 0, "52W High",       text_color = hiColor, text_size = size.small)
-    table.cell(tbl, 1, 0, str.tostring(hi52, format.mintick), text_color = hiColor, text_size = size.small)
-    table.cell(tbl, 0, 1, "52W Low",        text_color = loColor, text_size = size.small)
-    table.cell(tbl, 1, 1, str.tostring(lo52, format.mintick), text_color = loColor, text_size = size.small)
-    table.cell(tbl, 0, 2, "From high",      text_size = size.small, text_color = chart.fg_color)
-    table.cell(tbl, 1, 2, str.tostring(pctFrom(hi52), "#.##") + "%", text_size = size.small, text_color = chart.fg_color)
-    table.cell(tbl, 0, 3, "Range position", text_size = size.small, text_color = chart.fg_color)
+    rangePos = hiLvl == loLvl ? 100.0 : (close - loLvl) / (hiLvl - loLvl) * 100
+    table.cell(tbl, 0, 0, lenTxt + " High",  text_color = hiColor, text_size = size.small)
+    table.cell(tbl, 1, 0, str.tostring(hiLvl, format.mintick), text_color = hiColor, text_size = size.small)
+    table.cell(tbl, 0, 1, lenTxt + " Low",   text_color = loColor, text_size = size.small)
+    table.cell(tbl, 1, 1, str.tostring(loLvl, format.mintick), text_color = loColor, text_size = size.small)
+    table.cell(tbl, 0, 2, "From high",       text_size = size.small, text_color = chart.fg_color)
+    table.cell(tbl, 1, 2, str.tostring(pctFrom(hiLvl), "#.##") + "%", text_size = size.small, text_color = chart.fg_color)
+    table.cell(tbl, 0, 3, "Range position",  text_size = size.small, text_color = chart.fg_color)
     table.cell(tbl, 1, 3, str.tostring(rangePos, "#.#") + "%", text_size = size.small, text_color = chart.fg_color)
 
 // ───────────────────────── Alerts ─────────────────────────
-alertcondition(newHigh, "New 52-week high", "{{ticker}} made a new 52-week high at {{high}}")
-alertcondition(newLow,  "New 52-week low",  "{{ticker}} made a new 52-week low at {{low}}")
+alertcondition(newHigh, "New lookback high", "{{ticker}} made a new lookback high at {{high}}")
+alertcondition(newLow,  "New lookback low",  "{{ticker}} made a new lookback low at {{low}}")
