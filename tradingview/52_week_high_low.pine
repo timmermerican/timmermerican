@@ -22,7 +22,7 @@ useWicks = input.bool(true, "Use wicks (high/low)", group = grpLb, display = dis
 grpStyle   = "Style"
 hiColor    = input.color(color.new(color.teal, 0), "High line", group = grpStyle, display = display.none)
 loColor    = input.color(color.new(color.red, 0),  "Low line",  group = grpStyle, display = display.none)
-lineWidth  = input.int(2, "Line width", minval = 1, maxval = 4, group = grpStyle, display = display.none)
+lineWidth  = input.int(1, "Line width", minval = 1, maxval = 4, group = grpStyle, display = display.none)
 showLabels = input.bool(true, "Show price labels on last bar", group = grpStyle, display = display.none)
 showMarks  = input.bool(true, "Mark new highs/lows",           group = grpStyle, display = display.none)
 showTable  = input.bool(true, "Show distance table",           group = grpStyle, display = display.none)
@@ -117,11 +117,11 @@ newLow  = not na(loLvl[1]) and loSrc < loLvl[1]
 lenTxt = isCal ? str.tostring(lookbackWeeks) + "W" : str.tostring(lookbackBars) + " × " + tfText(tf)
 
 // ───────────────────────── Plots ─────────────────────────
-plot(hiLvl, "Lookback High", hiColor, lineWidth, plot.style_stepline)
-plot(loLvl, "Lookback Low",  loColor, lineWidth, plot.style_stepline)
+plot(hiLvl, "Lookback High", hiColor, lineWidth, plot.style_stepline, linestyle = plot.linestyle_dotted)
+plot(loLvl, "Lookback Low",  loColor, lineWidth, plot.style_stepline, linestyle = plot.linestyle_dotted)
 
-plotshape(showMarks and newHigh, "New High", shape.triangleup,   location.abovebar, hiColor, size = size.tiny, display = display.pane)
-plotshape(showMarks and newLow,  "New Low",  shape.triangledown, location.belowbar, loColor, size = size.tiny, display = display.pane)
+plotshape(showMarks and newHigh, "New High", shape.triangledown, location.abovebar, hiColor, size = size.tiny, display = display.pane)
+plotshape(showMarks and newLow,  "New Low",  shape.triangleup,   location.belowbar, loColor, size = size.tiny, display = display.pane)
 
 // % move needed from the current price to reach a level (positive = up, negative = down).
 pctTo(level) => (level - close) / close * 100
